@@ -16,7 +16,7 @@ public class GoMEntities {
     public static final RegistryObject<EntityType<GoMEntity>> MAGIC_GUARDIAN =
             ENTITIES.register("magic_guardian",
                     () -> EntityType.Builder.of(GoMEntity::new, MobCategory.MONSTER)
-                            .sized(1.2F, 2.8F)
+                            .sized(0.6F, 1.8F)
                             .build(new ResourceLocation(ExtraBossRush.MOD_ID, "magic_guardian").toString())
             );
 

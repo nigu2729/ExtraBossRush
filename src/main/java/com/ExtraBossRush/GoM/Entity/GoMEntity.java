@@ -45,18 +45,15 @@ public class GoMEntity extends Monster {
                 .add(Attributes.ATTACK_DAMAGE, 15.0D)
                 .add(Attributes.FOLLOW_RANGE, 100.0D);
     }
-
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(1, new LookAtPlayerGoal(this, ServerPlayer.class, 16.0F));
     }
-
     @Override
     protected void defineSynchedData() {
         // これが無いと体力等の同期用データが登録されず NPE になる
         super.defineSynchedData();
     }
-
     @Override
     public void tick() {
         super.tick();
@@ -74,20 +71,20 @@ public class GoMEntity extends Monster {
         }
             bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
     }
-
-
     @Override
     public boolean hurt(DamageSource source, float amount) {
         // 攻撃時のボスバー表示追加処理…
         return super.hurt(source, amount);
     }
-
+    @Override
+    public boolean isPersistenceRequired() {
+        return true;
+    }
     @Override
     public void remove(RemovalReason reason) {
         super.remove(reason);
         if (bossEvent != null) bossEvent.removeAllPlayers();
     }
-
     public void RandomSkill() {  // クラス内メソッドとして
         if (!(this.level() instanceof ServerLevel world)) return;
 
@@ -108,8 +105,8 @@ public class GoMEntity extends Monster {
             double ty = target.getY() + target.getEyeHeight() * 0.5;
 
             for (int j = 0; j < timesPerPlayer; j++) {
-                double offsetX = (random.nextDouble() - 0.5) * 20.0;
-                double offsetZ = (random.nextDouble() - 0.5) * 20.0;
+                double offsetX = (random.nextDouble() - 0.5) * 50.0;
+                double offsetZ = (random.nextDouble() - 0.5) * 50.0;
 
                 double targetX = target.getX() + offsetX;
                 double targetZ = target.getZ() + offsetZ;

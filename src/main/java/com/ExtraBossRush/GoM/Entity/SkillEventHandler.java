@@ -9,6 +9,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.Level;
+import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
@@ -26,12 +27,20 @@ public class SkillEventHandler {
         double y = target.getY();
         double z = target.getZ();
 
-        Explosion explosion = level.explode(null, x, y, z, 25.0F, Level.ExplosionInteraction.TNT);
+        Explosion explosion = level.explode(null, x, y, z, 25.0F, Level.ExplosionInteraction.NONE);
         if (explosion != null) {
             explosion.finalizeExplosion(true);
         }
 
         level.addParticle(ParticleTypes.EXPLOSION, x, y, z, 0, 0, 0);
         target.sendSystemMessage(Component.literal("GoMのスキルが発動しました！"));
+    }
+    public static class ExplosionHandler {
+        @SubscribeEvent
+        public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
+            event.getAffectedEntities().removeIf(entity ->
+                    entity.getType() == GoMEntities.MAGIC_GUARDIAN.get()
+            );
+        }
     }
 }
