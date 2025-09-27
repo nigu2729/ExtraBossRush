@@ -1,6 +1,7 @@
 package com.ExtraBossRush;
 
 import com.ExtraBossRush.GoM.Entity.GoMEntities;
+import com.ExtraBossRush.GoM.Entity.GoMEventSubscriber;
 import com.ExtraBossRush.GoM.Item.GoMItem;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;

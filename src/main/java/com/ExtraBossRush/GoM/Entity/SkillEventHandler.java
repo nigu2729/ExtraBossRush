@@ -35,12 +35,8 @@ public class SkillEventHandler {
         level.addParticle(ParticleTypes.EXPLOSION, x, y, z, 0, 0, 0);
         target.sendSystemMessage(Component.literal("GoMのスキルが発動しました！"));
     }
-    public static class ExplosionHandler {
-        @SubscribeEvent
-        public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
-            event.getAffectedEntities().removeIf(entity ->
-                    entity.getType() == GoMEntities.MAGIC_GUARDIAN.get()
-            );
-        }
+    @SubscribeEvent
+    public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
+        event.getAffectedEntities().removeIf(entity -> entity.getType() == GoMEntities.MAGIC_GUARDIAN.get());
     }
 }

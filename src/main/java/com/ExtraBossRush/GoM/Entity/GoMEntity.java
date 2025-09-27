@@ -40,7 +40,7 @@ public class GoMEntity extends Monster {
 
     public static AttributeSupplier.Builder createAttributes() {
         return Mob.createMobAttributes()
-                .add(Attributes.MAX_HEALTH, 200.0D)
+                .add(Attributes.MAX_HEALTH, 512.0D)
                 .add(Attributes.MOVEMENT_SPEED, 0.5D)
                 .add(Attributes.ATTACK_DAMAGE, 15.0D)
                 .add(Attributes.FOLLOW_RANGE, 100.0D);
@@ -83,7 +83,10 @@ public class GoMEntity extends Monster {
     @Override
     public void remove(RemovalReason reason) {
         super.remove(reason);
-        if (bossEvent != null) bossEvent.removeAllPlayers();
+        if (bossEvent != null) {
+            bossEvent.setVisible(false);
+            bossEvent.removeAllPlayers();
+        }
     }
     public void RandomSkill() {  // クラス内メソッドとして
         if (!(this.level() instanceof ServerLevel world)) return;
