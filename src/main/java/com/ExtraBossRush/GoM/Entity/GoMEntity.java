@@ -69,8 +69,10 @@ public class GoMEntity extends Monster {
                 bossEvent.removePlayer(player);
             }
         }
-        this.RandomSkill();
-        bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
+        if (!level().isClientSide && this.tickCount % 100 == 0) {
+            this.RandomSkill(); // 100tickごとにスキル発動
+        }
+            bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
     }
 
 
