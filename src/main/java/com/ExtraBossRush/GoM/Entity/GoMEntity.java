@@ -51,7 +51,6 @@ public class GoMEntity extends Monster {
     }
     @Override
     protected void defineSynchedData() {
-        // これが無いと体力等の同期用データが登録されず NPE になる
         super.defineSynchedData();
     }
     @Override

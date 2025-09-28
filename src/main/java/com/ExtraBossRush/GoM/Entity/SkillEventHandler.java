@@ -12,6 +12,7 @@ import net.minecraft.world.level.Level;
 import net.minecraftforge.event.level.ExplosionEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import java.util.Random;
 
 
 @Mod.EventBusSubscriber(modid = ExtraBossRush.MOD_ID)
@@ -22,10 +23,13 @@ public class SkillEventHandler {
         GoMEntity boss = event.getBoss();
         ServerPlayer target = event.getTarget();
         Level level = target.level(); // または boss.level()
+        Random random = new Random();
+        double offsetX = (random.nextDouble() - 0.5) * 25.0;
+        double offsetZ = (random.nextDouble() - 0.5) * 25.0;
 
-        double x = target.getX();
-        double y = target.getY();
-        double z = target.getZ();
+        double x = target.getX() + offsetX;
+        double y = target.getY() + 0.75;
+        double z = target.getZ() + offsetZ;
 
         Explosion explosion = level.explode(null, x, y, z, 25.0F, Level.ExplosionInteraction.NONE);
         if (explosion != null) {
@@ -33,7 +37,6 @@ public class SkillEventHandler {
         }
 
         level.addParticle(ParticleTypes.EXPLOSION, x, y, z, 0, 0, 0);
-        target.sendSystemMessage(Component.literal("GoMのスキルが発動しました！"));
     }
     @SubscribeEvent
     public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
