@@ -28,10 +28,10 @@ public class SkillEventHandler {
         double offsetZ = (random.nextDouble() - 0.5) * 25.0;
 
         double x = target.getX() + offsetX;
-        double y = target.getY() + 0.75;
+        double y = target.getY() + 5;
         double z = target.getZ() + offsetZ;
 
-        Explosion explosion = level.explode(null, x, y, z, 25.0F, Level.ExplosionInteraction.NONE);
+        Explosion explosion = level.explode(boss, x, y, z, 25.0F, Level.ExplosionInteraction.NONE);
         if (explosion != null) {
             explosion.finalizeExplosion(true);
         }
