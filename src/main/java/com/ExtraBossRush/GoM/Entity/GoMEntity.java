@@ -123,4 +123,5 @@ public class GoMEntity extends Monster {
     public ServerBossEvent getBossEvent() {
         return bossEvent;
     }
+
 }

@@ -38,8 +38,5 @@ public class SkillEventHandler {
 
         level.addParticle(ParticleTypes.EXPLOSION, x, y, z, 0, 0, 0);
     }
-    @SubscribeEvent
-    public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
-        event.getAffectedEntities().removeIf(entity -> entity.getType() == GoMEntities.MAGIC_GUARDIAN.get());
-    }
+    
 }
