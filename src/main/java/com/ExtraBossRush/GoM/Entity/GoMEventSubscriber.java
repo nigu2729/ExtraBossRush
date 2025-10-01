@@ -47,9 +47,6 @@ public class GoMEventSubscriber {
                 player.getPersistentData().putInt("ResetInvTimeTick", tick);
             }
         }
-        if (event.phase == TickEvent.Phase.END) {
-            new f1().checkAndDetonatePlayer(event.player);
-        }
     }
     @SubscribeEvent
     public static void onTimeChange(TimeChangeEvent event) {
