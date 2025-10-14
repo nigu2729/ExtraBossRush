@@ -1,7 +1,6 @@
 package com.ExtraBossRush.GoM.Entity;
 
 import com.ExtraBossRush.ExtraBossRush;
-import com.ExtraBossRush.GoM.Attack.f1;
 import com.ExtraBossRush.GoM.Support.Time.TimeChangeEvent;
 import com.ExtraBossRush.GoM.Support.Time.TimeConfig;
 import net.minecraft.server.level.ServerPlayer;

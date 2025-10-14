@@ -30,6 +30,8 @@ public class GoMItem {
                     .stacksTo(1) // スタック不可（杖らしい）
                     .durability(1000))); // 耐久値1000（オプション、壊れないなら.durability(0)）
 
+    public static final RegistryObject<Item> CUSTOM_ITEM = ITEMS.register("custom_item",
+            () -> new Item(new Item.Properties().stacksTo(64)));
 
     // モッド初期化時に呼び出す
     public static void register(IEventBus bus) {
