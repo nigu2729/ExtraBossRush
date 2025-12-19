@@ -30,6 +30,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.Level.ExplosionInteraction;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.level.ExplosionEvent;
@@ -294,6 +295,21 @@ public class GoMEntity extends Monster {
         super.remove(reason);
         bossEvent.setVisible(false);
         bossEvent.removeAllPlayers();
+    }
+
+    @Override
+    public boolean isPickable() {
+        return false;
+    }
+
+    private boolean hitboxDisabled = true;
+
+    @Override
+    public HitResult pick(double maxDistance, float tickDelta, boolean inFluid) {
+        if (hitboxDisabled) {
+            return null; // トレースヒットなし → ヒットボックス無効
+        }
+        return super.pick(maxDistance, tickDelta, inFluid);
     }
 
     public void RandomSkill() {

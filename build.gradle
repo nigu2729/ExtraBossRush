@@ -4,13 +4,14 @@ plugins {
     id 'idea'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7.+'
 }
 
 version = '1.0.0'
 group = mod_group_id
 
 base {
-    archivesName = mod_id
+    archivesName = 'ExtraBossRush'
 }
 
 // Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
@@ -115,6 +116,13 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 repositories {
     maven { name = 'forge'; url = 'https://maven.minecraftforge.net' }
     mavenCentral()
+
+    maven {
+        url "https://cursemaven.com"
+        content {
+            includeGroup "curse.maven"
+        }
+    }
     // 必要なら他リポジトリ
 }
 
@@ -125,6 +133,7 @@ dependencies {
     // If the group id is "net.minecraft" and the artifact id is one of ["client", "server", "joined"],
     // then special handling is done to allow a setup of a vanilla dependency without the use of an external repository.
     minecraft 'net.minecraftforge:forge:1.20.1-47.4.0'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
@@ -185,4 +194,9 @@ publishing {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
+
+mixin {
+    add sourceSets.main, "extrabossrush.refmap.json"
+    config "extrabossrush.mixins.json"
 }
