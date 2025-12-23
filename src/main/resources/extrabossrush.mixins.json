@@ -8,6 +8,7 @@
     "LevelMixin"
   ],
   "client": [
+    "KeyBindsScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1

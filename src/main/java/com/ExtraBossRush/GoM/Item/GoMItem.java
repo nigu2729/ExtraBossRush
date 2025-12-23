@@ -25,7 +25,7 @@ public class GoMItem {
                             new Item.Properties()
                     )
             );
-    public static final RegistryObject<Item> EXPLOSION_STAFF = ITEMS.register("explosion_staff", // タイプミス修正: exposion → explosion
+    public static final RegistryObject<Item> EXPLOSION_STAFF = ITEMS.register("GoM_staff",
             () -> new ExplosionStaff(new Item.Properties() // Propertiesを追加（デフォルト設定）
                     .stacksTo(1) // スタック不可（杖らしい）
                     .durability(1000))); // 耐久値1000（オプション、壊れないなら.durability(0)）

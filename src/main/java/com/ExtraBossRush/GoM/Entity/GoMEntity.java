@@ -11,7 +11,6 @@ import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.util.Mth;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.damagesource.DamageSource;
@@ -20,16 +19,11 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
-import net.minecraft.world.entity.ai.control.MoveControl;
-import net.minecraft.world.level.pathfinder.Path;
-import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.level.Level.ExplosionInteraction;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
@@ -41,6 +35,7 @@ import java.util.*;
 
 @Mod.EventBusSubscriber(modid = ExtraBossRush.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class GoMEntity extends Monster {
+
     private final ServerBossEvent bossEvent;
 
     private final Map<UUID, Integer> floatTimers = new HashMap<>();
@@ -48,23 +43,45 @@ public class GoMEntity extends Monster {
     private static final double FLOAT_RANGE = 500.0;
     private static final float EXPLOSION_POWER = 30.0F;
     private static final int EXPLOSION_REPEAT = 4;
-    private static final int SEARCH_RADIUS_GROUND = 50;
-    private static final double HOVER_OFFSET_Y = 20.0;
-    private static final double DESIRED_DISTANCE_XZ = 25.0;
-    private static final double SPEED_MOVE = 0.5;
-    private static final double SPEED_HOVER = 0.12;
-    private static final float ROTATION_LERP_FACTOR = 0.15f;
 
-    private Vec3 currentTarget = null;
-    private Path currentPath = null;
+    private static final double TELEPORT_DISTANCE_THRESHOLD = 400.0; // 400ブロック以上離れたらワープ
+    private static final double TELEPORT_MIN_RADIUS = 50.0;
+    private static final double TELEPORT_MAX_RADIUS = 100.0;
+    private static final double TELEPORT_HEIGHT_MIN = 30.0;
+    private static final double TELEPORT_HEIGHT_MAX = 50.0;
+
+    private static final double SPEED_MOVE = 0.5;
+    private static final float ROTATION_LERP_FACTOR = 0.15f;
+    private static final double MAX_MOVE_PER_TICK = 5000.0;
 
     private static final Map<Explosion, GoMEntity> explosionSourceMap =
             Collections.synchronizedMap(new WeakHashMap<>());
 
+    // 前ティック保持用
+    private Vec3 prevPos = Vec3.ZERO;
+    private Vec3 prevDeltaMovement = Vec3.ZERO;
+    private float prevYaw = 0f;
+    private float prevHeadYaw = 0f;
+
+    // 計画リスト
+    private final List<PlannedUpdate> plannedUpdates = new ArrayList<>();
+
+    private static final class PlannedUpdate {
+        final Vec3 deltaMovement;
+        final Float yaw;
+        final Float headYaw;
+
+        PlannedUpdate(Vec3 deltaMovement, Float yaw, Float headYaw) {
+            this.deltaMovement = deltaMovement;
+            this.yaw = yaw;
+            this.headYaw = headYaw;
+        }
+    }
+
     public GoMEntity(EntityType<? extends GoMEntity> type, Level world) {
         super(type, world);
         this.setNoGravity(true);
-        this.moveControl = new MoveControl(this);
+        this.xpReward = 500;
         bossEvent = new ServerBossEvent(
                 Component.literal("魔術の守護者"),
                 BossEvent.BossBarColor.RED,
@@ -78,22 +95,36 @@ public class GoMEntity extends Monster {
                 .add(Attributes.MAX_HEALTH, 512.0D)
                 .add(Attributes.MOVEMENT_SPEED, 1.0D)
                 .add(Attributes.ATTACK_DAMAGE, 15.0D)
-                .add(Attributes.FOLLOW_RANGE, 500.0D);
+                .add(Attributes.FOLLOW_RANGE, 500.0D)
+                .add(Attributes.KNOCKBACK_RESISTANCE, 1.0D);
     }
-    /**
-     * 半径 radius 内で最も高い地面の Y を返す。水面も地面としてカウントする。
-     */
+
+    // ブロック貫通を完全に許可
+    @Override
+    public boolean isPickable() {
+        return false;
+    }
+
+    @Override
+    public boolean canBeCollidedWith() {
+        return false;
+    }
+
+    @Override
+    public HitResult pick(double maxDistance, float tickDelta, boolean inFluid) {
+        return null; // 完全に選択不能・貫通
+    }
+
     private int findHighestGroundY(ServerLevel level, double cx, double cz, int radius) {
         int cxBlock = Mth.floor(cx);
         int czBlock = Mth.floor(cz);
-        int highest = level.getMinBuildHeight(); // 最低値から開始
+        int highest = level.getMinBuildHeight();
         int r = radius;
         for (int dx = -r; dx <= r; dx++) {
             for (int dz = -r; dz <= r; dz++) {
-                if (dx * dx + dz * dz > r * r) continue; // 円形領域に限定
+                if (dx * dx + dz * dz > r * r) continue;
                 int x = cxBlock + dx;
                 int z = czBlock + dz;
-                // WORLD_SURFACE は水面を含むことが多い（葉や草の上面も含む）
                 int y = level.getHeight(Heightmap.Types.WORLD_SURFACE, x, z);
                 if (y > highest) highest = y;
             }
@@ -101,9 +132,6 @@ public class GoMEntity extends Monster {
         return highest;
     }
 
-    /**
-     * 最も近いプレイヤーを返す（ServerLevel.players() の中から）。見つからなければ null。
-     */
     private ServerPlayer findNearestPlayer(ServerLevel level) {
         ServerPlayer nearest = null;
         double bestSq = Double.MAX_VALUE;
@@ -118,126 +146,30 @@ public class GoMEntity extends Monster {
         return nearest;
     }
 
-    /**
-     * 目標位置へ滑らかに移動する。XZ 方向のみで距離調整し、目標Y は固定。
-     * speed は移動速度（例: 0.15）。
-     */
-    private void moveTowardsTargetXZ(double targetX, double targetY, double targetZ, double speed) {
-        Vec3 pos = this.position();
-        Vec3 dir = new Vec3(targetX - pos.x, targetY - pos.y, targetZ - pos.z);
-        // XZ のみ正規化して speed をかける（垂直成分は目標Y への補正量）
-        Vec3 dirXZ = new Vec3(dir.x, 0, dir.z);
-        double distXZ = dirXZ.length();
-        double vy = dir.y * 0.1; // Y軸への補間係数（滑らかに上がる／下がる）
-        double vx = 0, vz = 0;
-        if (distXZ > 0.01) {
-            double factor = speed / distXZ;
-            vx = dirXZ.x * factor;
-            vz = dirXZ.z * factor;
-        }
-        this.moveControl = new MoveControl(this);
-        // サーバー→クライアント同期（プレイヤー以外のエンティティでも有効）
-        if (this.level() instanceof ServerLevel) {
-            for (ServerPlayer p : ((ServerLevel) this.level()).players()) {
-                p.connection.send(new ClientboundSetEntityMotionPacket(this));
-            }
-        }
-    }
-    @Override
-    protected void registerGoals() {
-        this.goalSelector.addGoal(1, new LookAtPlayerGoal(this, ServerPlayer.class, 16.0F));
-    }
-
-    @Override
-    public void tick() {
-        super.tick();
-        if (this.level() instanceof ServerLevel serverLevel) {
-            // 1) 周囲半径50の一番高い地面の y を取得して目標 y を決める
-            int highest = findHighestGroundY(serverLevel, this.getX(), this.getZ(), 50);
-            double targetY = highest + 20.0;
-
-            // 2) 最も近いプレイヤーを見つける
-            ServerPlayer nearest = findNearestPlayer(serverLevel);
-            if (nearest != null) {
-                // XZ 平面のみで、プレイヤーから 25 ブロック離れる位置を計算
-                double px = nearest.getX();
-                double pz = nearest.getZ();
-                double bx = this.getX();
-                double bz = this.getZ();
-
-                double dx = bx - px;
-                double dz = bz - pz;
-                double distXZ = Math.sqrt(dx * dx + dz * dz);
-
-                double targetX;
-                double targetZ;
-                if (distXZ < 0.001) {
-                    // 完全に重なっている場合はランダムな方向へ置く
-                    double angle = this.random.nextDouble() * Math.PI * 2.0;
-                    targetX = px + Math.cos(angle) * 25.0;
-                    targetZ = pz + Math.sin(angle) * 25.0;
-                } else {
-                    double nx = dx / distXZ;
-                    double nz = dz / distXZ;
-                    targetX = px + nx * 25.0;
-                    targetZ = pz + nz * 25.0;
-                }
-
-                // 3) 目標に向けて滑らかに移動（速度は好みに応じて調整）
-                moveTowardsTargetXZ(targetX, targetY, targetZ, 0.15);
+    private void updateBossBar(ServerLevel level) {
+        for (ServerPlayer player : level.players()) {
+            if (this.distanceTo(player) <= 500.0D) {
+                bossEvent.addPlayer(player);
             } else {
-                // プレイヤーが見つからない場合はホバリングを維持するために Y を調整
-                double bx = this.getX();
-                double bz = this.getZ();
-                moveTowardsTargetXZ(bx, targetY, bz, 0.08); // ゆっくり上下合わせる
+                bossEvent.removePlayer(player);
             }
-        }
-        if (!(level() instanceof ServerLevel serverLevel)) return;
-
-        for (ServerPlayer player : serverLevel.players()) {
-            if (this.distanceTo(player) <= 500.0D) bossEvent.addPlayer(player);
-            else bossEvent.removePlayer(player);
-        }
-
-        if (this.tickCount % 100 == 0) {
-            this.RandomSkill();
         }
         bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
-        handleFloatingPlayers(serverLevel);
-        // --- ホバリング目標Y と 移動ターゲット更新 ---
-        int highestGroundY = findHighestGroundY(serverLevel, this.getX(), this.getZ(), SEARCH_RADIUS_GROUND);
-        double targetY = highestGroundY + HOVER_OFFSET_Y;
-        ServerPlayer nearest = findNearestPlayer(serverLevel);
-        if (nearest != null) {
-            Vec3 desired = calcDesiredPositionAroundPlayerXZ(nearest, DESIRED_DISTANCE_XZ, targetY);
-            updateMovementTarget(serverLevel, desired);
-        } else {
-            if (currentTarget == null) currentTarget = new Vec3(this.getX(), targetY, this.getZ());
-            else updateMovementTarget(serverLevel, new Vec3(this.getX(), targetY, this.getZ()), SPEED_HOVER);
-        }
-        performMovementAndRotation(serverLevel);
     }
 
     private void handleFloatingPlayers(ServerLevel level) {
         Vec3 center = this.position();
-        List<ServerPlayer> nearby = PSU.getPlayersWithinRadius(
-                level, center.x, center.y, center.z, FLOAT_RANGE
-        );
+        List<ServerPlayer> nearby = PSU.getPlayersWithinRadius(level, center.x, center.y, center.z, FLOAT_RANGE);
         if (nearby.isEmpty()) return;
 
         for (ServerPlayer player : nearby) {
-            if (!player.isAlive()) {
+            if (!player.isAlive() || player.onGround()) {
                 floatTimers.remove(player.getUUID());
                 continue;
             }
 
             GameType mode = player.gameMode.getGameModeForPlayer();
-            if (mode != GameType.SURVIVAL && mode != GameType.CREATIVE) {
-                floatTimers.remove(player.getUUID());
-                continue;
-            }
-
-            if (player.onGround()) {
+            if (mode != GameType.SURVIVAL && mode != GameType.ADVENTURE) {
                 floatTimers.remove(player.getUUID());
                 continue;
             }
@@ -246,32 +178,173 @@ public class GoMEntity extends Monster {
             floatTimers.put(player.getUUID(), ticks);
 
             if (ticks >= MAX_FLOAT_TICKS) {
-                int ticksToReset = 200;
-                GoMInvulnerabilityManager.requestResetInvulnerableTicks(player, ticksToReset);
-                double x = player.getX();
-                double y = player.getY();
-                double z = player.getZ();
-
+                double x = player.getX(), y = player.getY(), z = player.getZ();
                 for (int i = 0; i < EXPLOSION_REPEAT; i++) {
-                    Explosion exp = level.explode(
-                            this, x, y + i * 2, z,
-                            EXPLOSION_POWER,
-                            ExplosionInteraction.NONE
-                    );
+                    Explosion exp = level.explode(this, x, y + i * 2, z, EXPLOSION_POWER, Level.ExplosionInteraction.NONE);
                     if (exp != null) {
                         explosionSourceMap.put(exp, this);
                         exp.finalizeExplosion(true);
                     }
                 }
-
                 player.setDeltaMovement(0, 0, 0);
                 player.connection.send(new ClientboundSetEntityMotionPacket(player));
+                level.sendParticles(ParticleTypes.EXPLOSION, x, y, z, 1, 0, 0, 0, 0);
+                floatTimers.remove(player.getUUID());
+            }
+        }
+    }
 
-                level.sendParticles(
-                        ParticleTypes.EXPLOSION,
-                        x, y, z,
-                        1, 0, 0, 0, 0
-                );
+    // 400ブロック以上離れたらワープ
+    private boolean tryTeleportNearPlayer(ServerLevel level, ServerPlayer player) {
+        double dist = this.distanceTo(player);
+        if (dist < TELEPORT_DISTANCE_THRESHOLD) return false;
+
+        double angle = random.nextDouble() * Math.PI * 2;
+        double radius = TELEPORT_MIN_RADIUS + random.nextDouble() * (TELEPORT_MAX_RADIUS - TELEPORT_MIN_RADIUS);
+        double offsetX = Math.cos(angle) * radius;
+        double offsetZ = Math.sin(angle) * radius;
+
+        int groundY = findHighestGroundY(level, player.getX() + offsetX, player.getZ() + offsetZ, 10);
+        double teleportY = groundY + TELEPORT_HEIGHT_MIN + random.nextDouble() * (TELEPORT_HEIGHT_MAX - TELEPORT_HEIGHT_MIN);
+
+        Vec3 teleportPos = new Vec3(player.getX() + offsetX, teleportY, player.getZ() + offsetZ);
+
+        // ワープ実行（計画リスト経由でラバーバンド対策）
+        Vec3 deltaToTeleport = teleportPos.subtract(this.position());
+        plannedUpdates.add(new PlannedUpdate(deltaToTeleport, null, null));
+
+        // パーティクルで演出
+        level.sendParticles(ParticleTypes.PORTAL, this.getX(), this.getY(), this.getZ(), 50, 1, 1, 1, 0.5);
+        level.sendParticles(ParticleTypes.PORTAL, teleportPos.x, teleportPos.y, teleportPos.z, 50, 1, 1, 1, 0.5);
+
+        return true;
+    }
+
+    private void planMovementAndRotationTowardsPlayer(ServerLevel level, ServerPlayer player, double baseHoverY) {
+        Vec3 playerPos = player.position().add(0, player.getEyeHeight() * 0.5, 0);
+        Vec3 bossPos = this.position();
+
+        double distXZ = bossPos.subtract(playerPos.x, 0, playerPos.z).horizontalDistance();
+
+        // 気分パラメータで動きに変化
+        double moodPhase = (this.tickCount * 0.02) % (Math.PI * 2);
+        double mood = Math.sin(moodPhase) * 0.5 + 0.5; // 0.0 ~ 1.0
+
+        double desiredDist = 25.0 + (mood * 40.0 - 20.0); // 15 ~ 45
+        double heightAdd = 20.0 + mood * 30.0; // +20 ~ +50
+        double targetY = baseHoverY + heightAdd;
+
+        Vec3 targetPos;
+        if (distXZ < 12.0) {
+            // 近すぎたら逃げる
+            Vec3 away = bossPos.subtract(playerPos).normalize();
+            targetPos = playerPos.add(away.scale(desiredDist));
+        } else {
+            Vec3 toPlayer = playerPos.subtract(bossPos).normalize();
+            Vec3 baseTarget = playerPos.add(toPlayer.scale(desiredDist));
+
+            // 周回っぽい横オフセット
+            double sideAngle = this.tickCount * 0.03 + mood * Math.PI;
+            double offsetX = Math.cos(sideAngle) * 10.0;
+            double offsetZ = Math.sin(sideAngle) * 10.0;
+
+            targetPos = new Vec3(baseTarget.x + offsetX, targetY, baseTarget.z + offsetZ);
+        }
+
+        Vec3 direction = targetPos.subtract(bossPos);
+        double distance = direction.length();
+
+        double speed = SPEED_MOVE * 0.8;
+        if (distance > desiredDist + 12.0) speed *= 2.2;
+        else if (distance < desiredDist - 12.0) speed *= 0.6;
+
+        double verticalWave = Math.sin(this.tickCount * 0.1) * 0.15 * (0.5 + mood);
+
+        Vec3 velocity = direction.normalize().scale(speed);
+        velocity = new Vec3(velocity.x, velocity.y + verticalWave, velocity.z);
+
+        float targetYaw = (float) (Mth.atan2(velocity.z, velocity.x) * 180F / Math.PI) - 90F;
+        float currentYaw = this.getYRot();
+        float lerpedYaw = Mth.rotLerp(ROTATION_LERP_FACTOR, currentYaw, targetYaw);
+
+        plannedUpdates.add(new PlannedUpdate(velocity, lerpedYaw, lerpedYaw));
+    }
+
+    private void planHoverInPlace(double targetY) {
+        Vec3 pos = this.position();
+        double vy = (targetY - pos.y) * 0.08;
+        double wanderX = (random.nextDouble() - 0.5) * 0.2;
+        double wanderZ = (random.nextDouble() - 0.5) * 0.2;
+        Vec3 velocity = new Vec3(wanderX, vy, wanderZ);
+
+        if (velocity.lengthSqr() > 1e-6) {
+            float targetYaw = (float) (Mth.atan2(velocity.z, velocity.x) * 180F / Math.PI) - 90F;
+            float currentYaw = this.getYRot();
+            float lerpedYaw = Mth.rotLerp(ROTATION_LERP_FACTOR, currentYaw, targetYaw);
+            plannedUpdates.add(new PlannedUpdate(velocity, lerpedYaw, lerpedYaw));
+        }
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (!(this.level() instanceof ServerLevel serverLevel)) return;
+
+        savePreviousTickStateAndClearPlans();
+
+        ServerPlayer nearest = findNearestPlayer(serverLevel);
+        int highestGroundY = findHighestGroundY(serverLevel, this.getX(), this.getZ(), 50);
+        double baseHoverY = highestGroundY + 20.0;
+
+        updateBossBar(serverLevel);
+        handleFloatingPlayers(serverLevel);
+
+        if (this.tickCount % 100 == 0) {
+            RandomSkill();
+        }
+
+        if (nearest != null) {
+            // 遠すぎたらワープ（計画リストに巨大デルタを追加 → applyで巻き戻しされないよう注意）
+            if (tryTeleportNearPlayer(serverLevel, nearest)) {
+                // ワープしたらこのティックの移動は終了
+                applyPlannedUpdates(serverLevel);
+                return;
+            }
+
+            planMovementAndRotationTowardsPlayer(serverLevel, nearest, baseHoverY);
+        } else {
+            planHoverInPlace(baseHoverY);
+        }
+
+        applyPlannedUpdates(serverLevel);
+    }
+
+    public void RandomSkill() {
+        if (!(this.level() instanceof ServerLevel world)) return;
+
+        double cx = this.getX(), cy = this.getY(), cz = this.getZ();
+        List<ServerPlayer> nearby = PSU.getPlayersWithinRadius(world, cx, cy, cz, 100.0);
+        if (nearby.isEmpty()) return;
+
+        Collections.shuffle(nearby, new java.util.Random() {
+            @Override
+            public int nextInt(int bound) {
+                return GoMEntity.this.random.nextInt(bound);
+            }
+        });
+
+        int timesPerPlayer = 4;
+
+        for (ServerPlayer target : nearby) {
+            double ty = target.getY() + target.getEyeHeight() * 0.5;
+            for (int j = 0; j < timesPerPlayer; j++) {
+                // ここも統一してthis.randomを使う（new Random()は不要）
+                double offsetX = (this.random.nextDouble() - 0.5) * 50.0;
+                double offsetZ = (this.random.nextDouble() - 0.5) * 50.0;
+                double targetX = target.getX() + offsetX;
+                double targetZ = target.getZ() + offsetZ;
+                float[] angles = LU.calculateLookAt(cx, cy, cz, targetX, ty, targetZ);
+                MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(this, target));
             }
         }
     }
@@ -279,9 +352,7 @@ public class GoMEntity extends Monster {
     @Override
     public boolean hurt(DamageSource source, float amount) {
         Entity attacker = source.getEntity();
-        if (attacker != null && attacker.getClass() == this.getClass()) {
-            return false;
-        }
+        if (attacker != null && attacker.getClass() == this.getClass()) return false;
         return super.hurt(source, amount);
     }
 
@@ -297,197 +368,38 @@ public class GoMEntity extends Monster {
         bossEvent.removeAllPlayers();
     }
 
-    @Override
-    public boolean isPickable() {
-        return false;
-    }
-
-    private boolean hitboxDisabled = true;
-
-    @Override
-    public HitResult pick(double maxDistance, float tickDelta, boolean inFluid) {
-        if (hitboxDisabled) {
-            return null; // トレースヒットなし → ヒットボックス無効
-        }
-        return super.pick(maxDistance, tickDelta, inFluid);
-    }
-
-    public void RandomSkill() {
-        if (!(this.level() instanceof ServerLevel world)) return;
-
-        double cx = this.getX();
-        double cy = this.getY();
-        double cz = this.getZ();
-        double radius = 100.0;
-
-        List<ServerPlayer> nearby = PSU.getPlayersWithinRadius(world, cx, cy, cz, radius);
-        if (nearby.isEmpty()) return;
-
-        Collections.shuffle(nearby, new Random());
-        Random random = new Random();
-        int timesPerPlayer = 4;
-
-        for (ServerPlayer target : nearby) {
-            double ty = target.getY() + target.getEyeHeight() * 0.5;
-            for (int j = 0; j < timesPerPlayer; j++) {
-                double offsetX = (random.nextDouble() - 0.5) * 50.0;
-                double offsetZ = (random.nextDouble() - 0.5) * 50.0;
-                double targetX = target.getX() + offsetX;
-                double targetZ = target.getZ() + offsetZ;
-                float[] angles = LU.calculateLookAt(cx, cy, cz, targetX, ty, targetZ);
-
-                MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(this, target));
-            }
-        }
-    }
-    public void clearFloatTimerFor(UUID uuid) {
-        this.floatTimers.remove(uuid);
-    }
-    public ServerBossEvent getBossEvent() {
-        return bossEvent;
-    }
-
     @SubscribeEvent
     public static void onExplosionDetonate(ExplosionEvent.Detonate event) {
         Explosion exp = event.getExplosion();
         GoMEntity src = explosionSourceMap.remove(exp);
         if (src == null) return;
 
-        // GoMEntity 自身は影響を受けない
         event.getAffectedEntities().removeIf(e -> e instanceof GoMEntity);
 
-        // ここで爆発で影響を受けるプレイヤーを取得して、無敵停止をリクエストする
-        int ticksToReset = 40; // 例: 40 tick = 2秒。ここを設定値に置き換えてください
+        int ticksToReset = 40;
         ServerLevel level = (ServerLevel) event.getLevel();
-
         for (Entity e : event.getAffectedEntities()) {
             if (e instanceof ServerPlayer player) {
-                // プレイヤーごとに tick を加算する（加算方式）
                 GoMInvulnerabilityManager.requestResetInvulnerableTicks(player, ticksToReset);
             }
         }
     }
-    private Vec3 calcDesiredPositionAroundPlayerXZ(ServerPlayer player, double distance, double targetY) {
-        double px = player.getX();
-        double pz = player.getZ();
-        double bx = this.getX();
-        double bz = this.getZ();
-        double dx = bx - px;
-        double dz = bz - pz;
-        double distXZ = Math.sqrt(dx * dx + dz * dz);
-        double targetX, targetZ;
-        if (distXZ < 0.001) {
-            double angle = this.random.nextDouble() * Math.PI * 2.0;
-            targetX = px + Math.cos(angle) * distance;
-            targetZ = pz + Math.sin(angle) * distance;
-        } else {
-            double nx = dx / distXZ;
-            double nz = dz / distXZ;
-            targetX = px + nx * distance;
-            targetZ = pz + nz * distance;
-        }
-        return new Vec3(targetX, targetY, targetZ);
+
+    public void clearFloatTimerFor(UUID uuid) {
+        floatTimers.remove(uuid);
     }
 
-    private void updateMovementTarget(ServerLevel level, Vec3 desired) {
-        updateMovementTarget(level, desired, SPEED_MOVE);
+    public ServerBossEvent getBossEvent() {
+        return bossEvent;
     }
 
-    private void updateMovementTarget(ServerLevel level, Vec3 desired, double speed) {
-        if (currentTarget == null || currentTarget.distanceToSqr(desired) > 1.0) {
-            currentTarget = desired;
-            if (!tryPathTo(level, desired, speed)) {
-                Vec3 fallback = randomHoverTarget(level, desired, 10, 20);
-                tryPathTo(level, fallback, speed);
-            }
-        }
-    }
-
-    private boolean tryPathTo(ServerLevel level, Vec3 dest, double speed) {
-        PathNavigation nav = this.getNavigation();
-        if (nav == null) return false;
-        BlockPos pos = BlockPos.containing(dest.x, dest.y, dest.z);
-        Path path = nav.createPath(pos, 0);
-        if (path != null && path.canReach()) {
-            this.currentPath = path;
-            return true;
-        }
-        return false;
-    }
-
-    private Vec3 randomHoverTarget(ServerLevel level, Vec3 around, double minR, double maxR) {
-        double angle = this.random.nextDouble() * Math.PI * 2.0;
-        double r = minR + this.random.nextDouble() * (maxR - minR);
-        double x = around.x + Math.cos(angle) * r;
-        double z = around.z + Math.sin(angle) * r;
-        int highest = findHighestGroundY(level, x, z, 6);
-        double y = highest + HOVER_OFFSET_Y;
-        return new Vec3(x, y, z);
-    }
-
-    private void performMovementAndRotation(ServerLevel level) {
-        if (currentPath != null && this.getNavigation() != null) {
-            if (!this.getNavigation().moveTo(currentPath, SPEED_MOVE)) {
-                currentPath = null;
-            } else {
-                Vec3 vel = this.getDeltaMovement();
-                if (vel.lengthSqr() > 1e-6) {
-                    float targetYaw = (float) (Mth.atan2(vel.z, vel.x) * (180F / Math.PI)) - 90F;
-                    float currentYaw = this.getYRot();
-                    float lerped = lerpAngle(currentYaw, targetYaw, ROTATION_LERP_FACTOR);
-                    this.setYRot(lerped);
-                    this.setYHeadRot(lerped);
-                }
-                return;
-            }
-        }
-
-        if (currentTarget != null) {
-            Vec3 pos = this.position();
-            Vec3 delta = new Vec3(currentTarget.x - pos.x, currentTarget.y - pos.y, currentTarget.z - pos.z);
-            Vec3 deltaXZ = new Vec3(delta.x, 0, delta.z);
-            double distXZ = deltaXZ.length();
-            if (distXZ > DESIRED_DISTANCE_XZ - 0.1) {
-                double vx = 0, vz = 0;
-                if (distXZ > 0.01) {
-                    double factor = SPEED_MOVE / distXZ;
-                    vx = deltaXZ.x * factor;
-                    vz = deltaXZ.z * factor;
-                }
-                double vy = delta.y * 0.12;
-                this.setDeltaMovement(vx, vy, vz);
-                float targetYaw = (float) (Mth.atan2(vz, vx) * (180F / Math.PI)) - 90F;
-                float currentYaw = this.getYRot();
-                float lerped = lerpAngle(currentYaw, targetYaw, ROTATION_LERP_FACTOR);
-                this.setYRot(lerped);
-                this.setYHeadRot(lerped);
-            } else {
-                Vec3 randomVel = new Vec3(
-                        (this.random.nextDouble() - 0.5) * SPEED_HOVER,
-                        (currentTarget.y - this.getY()) * 0.05,
-                        (this.random.nextDouble() - 0.5) * SPEED_HOVER
-                );
-                this.setDeltaMovement(randomVel);
-                Vec3 lookDir = randomVel.lengthSqr() > 1e-6 ? randomVel : this.getDeltaMovement();
-                float targetYaw = (float) (Mth.atan2(lookDir.z, lookDir.x) * (180F / Math.PI)) - 90F;
-                float currentYaw = this.getYRot();
-                float lerped = lerpAngle(currentYaw, targetYaw, ROTATION_LERP_FACTOR);
-                this.setYRot(lerped);
-                this.setYHeadRot(lerped);
-            }
-            syncMotionAndRotationToNearbyPlayers(level, this);
-        }
-    }
-
-    private static float lerpAngle(float current, float target, float factor) {
-        float f = wrapDegrees(target - current);
-        return current + f * factor;
-    }
-
-    private static float wrapDegrees(float angle) {
-        angle = (angle + 180.0F) % 360.0F;
-        if (angle < 0.0F) angle += 360.0F;
-        return angle - 180.0F;
+    // === ラバーバンド対策関連 ===
+    private void savePreviousTickStateAndClearPlans() {
+        this.prevPos = this.position();
+        this.prevDeltaMovement = this.getDeltaMovement();
+        this.prevYaw = this.getYRot();
+        this.prevHeadYaw = this.getYHeadRot();
+        this.plannedUpdates.clear();
     }
 
     private void syncMotionAndRotationToNearbyPlayers(ServerLevel level, Entity ent) {
@@ -496,5 +408,47 @@ public class GoMEntity extends Monster {
                 p.connection.send(new ClientboundSetEntityMotionPacket(ent));
             }
         }
+    }
+
+    private void applyPlannedUpdates(ServerLevel level) {
+        if (plannedUpdates.isEmpty()) return;
+
+        Vec3 sumDelta = Vec3.ZERO;
+        Float lastYaw = null;
+        Float lastHead = null;
+
+        for (PlannedUpdate pu : plannedUpdates) {
+            sumDelta = sumDelta.add(pu.deltaMovement);
+            if (pu.yaw != null) lastYaw = pu.yaw;
+            if (pu.headYaw != null) lastHead = pu.headYaw;
+        }
+
+        Vec3 predictedPos = this.prevPos.add(sumDelta);
+        double moved = predictedPos.distanceTo(this.prevPos);
+
+        // ワープ時は巨大移動を許可
+        if (moved > MAX_MOVE_PER_TICK && moved < 500.0) { // 500ブロック以内のワープはOK
+            // 異常移動として扱わず通常適用
+        } else if (moved > MAX_MOVE_PER_TICK) {
+            // 本物の異常移動 → 巻き戻し
+            this.setPos(prevPos.x, prevPos.y, prevPos.z);
+            this.setDeltaMovement(prevDeltaMovement);
+            this.setYRot(prevYaw);
+            this.setYHeadRot(prevHeadYaw);
+            syncMotionAndRotationToNearbyPlayers(level, this);
+            plannedUpdates.clear();
+            return;
+        }
+
+        this.setPos(predictedPos.x, predictedPos.y, predictedPos.z);
+        this.setDeltaMovement(sumDelta);
+        if (lastYaw != null) {
+            float head = lastHead != null ? lastHead : lastYaw;
+            this.setYRot(lastYaw);
+            this.setYHeadRot(head);
+        }
+
+        syncMotionAndRotationToNearbyPlayers(level, this);
+        plannedUpdates.clear();
     }
 }
