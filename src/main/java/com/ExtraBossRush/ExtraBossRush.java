@@ -3,6 +3,7 @@ package com.ExtraBossRush;
 import com.ExtraBossRush.GoM.Entity.GoMEntities;
 import com.ExtraBossRush.GoM.Entity.GoMEventSubscriber;
 import com.ExtraBossRush.GoM.Item.GoMItem;
+import com.ExtraBossRush.GoM.Item.GoMTabs;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -16,5 +17,6 @@ public class ExtraBossRush {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         GoMEntities.register(bus);
         GoMItem.register(bus);
+        GoMTabs.register(bus);
     }
 }

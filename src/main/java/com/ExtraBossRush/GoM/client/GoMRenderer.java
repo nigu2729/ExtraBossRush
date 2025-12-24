@@ -17,11 +17,12 @@ import net.minecraftforge.fml.common.Mod;
 public class GoMRenderer {
     @SubscribeEvent
     public static void registerEntityRenderers(RegisterRenderers event) {
-        // MagicGuardianEntity 用のレンダラーを登録
-        event.registerEntityRenderer(
-                GoMEntities.MAGIC_GUARDIAN.get(),
-                MagicGuardianRenderer::new
-        );
+        if (GoMEntities.MAGIC_GUARDIAN.isPresent()) {
+            event.registerEntityRenderer(
+                    GoMEntities.MAGIC_GUARDIAN.get(),
+                    MagicGuardianRenderer::new
+            );
+        }
     }
 
     // 独自レンダラー

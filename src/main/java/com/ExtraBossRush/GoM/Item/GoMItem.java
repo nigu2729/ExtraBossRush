@@ -16,26 +16,20 @@ public class GoMItem {
     public static final RegistryObject<ForgeSpawnEggItem> MAGIC_GUARDIAN_SPAWN_EGG =
             ITEMS.register("magic_guardian_spawn_egg",
                     () -> new ForgeSpawnEggItem(
-                            GoMEntities.MAGIC_GUARDIAN,  // 登録済み EntityType
-                            0x8833EE,                          // エッグの胴体色
-                            0x442288,// エッグの顔色
+                            GoMEntities.MAGIC_GUARDIAN,
+                            0x8833EE,
+                            0x442288,
                             new Item.Properties()
                     )
             );
     public static final RegistryObject<Item> EXPLOSION_STAFF =
             ITEMS.register("gom_staff",
                     () -> new ExplosionStaff(
-                            new Item.Properties() // Propertiesを追加（デフォルト設定）
-                            .stacksTo(1) // スタック不可（杖らしい）
-                            .durability(1000) // 耐久値1000（オプション、壊れないなら.durability(0)）
+                            new Item.Properties()
+                            .stacksTo(1)
+                            .durability(1000)
                     )
             );
-    public static final RegistryObject<Item> CUSTOM_ITEM = ITEMS.register("custom_item",
-            () -> new Item(
-                    new Item.Properties()
-                    .stacksTo(64)
-            )
-    );
     public static void register(IEventBus bus) {
         ITEMS.register(bus);
     }
