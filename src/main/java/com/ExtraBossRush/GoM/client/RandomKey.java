@@ -5,6 +5,8 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -17,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-@Mod(ExtraBossRush.MOD_ID)
+@OnlyIn(Dist.CLIENT)
 public class RandomKey {
     public RandomKey() {
         FMLJavaModLoadingContext.get().getModEventBus().addListener(this::clientSetup);
