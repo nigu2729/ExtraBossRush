@@ -28,7 +28,7 @@ public class RandomKey {
     }
 
     public static class KeyShuffler {
-        private static final boolean INCLUDE_MODIFIERS = false; // 修飾キーを候補に含めるか
+        private static final boolean INCLUDE_MODIFIERS = false;
         private static final int MIN_TICKS = 1200;
         private static final int MAX_TICKS = 1800;
         private static long tickCounter = 0L;
