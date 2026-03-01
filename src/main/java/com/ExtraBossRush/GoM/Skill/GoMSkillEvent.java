@@ -7,17 +7,19 @@ import net.minecraftforge.eventbus.api.Event;
 public class GoMSkillEvent extends Event {
     private final GoMEntity boss;
     private final ServerPlayer target;
-
-    public GoMSkillEvent(GoMEntity boss, ServerPlayer target) {
+    private final int skillId;
+    public GoMSkillEvent(GoMEntity boss, ServerPlayer target, int skillId) {
         this.boss = boss;
         this.target = target;
+        this.skillId = skillId;
     }
-
     public GoMEntity getBoss() {
         return boss;
     }
-
     public ServerPlayer getTarget() {
         return target;
+    }
+    public int getSkillId() {
+        return skillId;
     }
 }

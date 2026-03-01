@@ -1,4 +1,4 @@
-package com.ExtraBossRush.GoM.client;
+/*package com.ExtraBossRush.GoM.client;
 
 import com.ExtraBossRush.ExtraBossRush;
 import com.mojang.blaze3d.platform.InputConstants;
@@ -223,4 +223,4 @@ public class RandomKey {
             return k;
         }
     }
-}
+}*/

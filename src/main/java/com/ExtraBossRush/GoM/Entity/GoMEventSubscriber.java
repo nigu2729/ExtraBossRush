@@ -18,10 +18,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * 改良版: 外部から無敵停止を要求できる API を提供し、UUIDごとに残り時間を管理する。
  */
-@Mod.EventBusSubscriber(
-        modid = ExtraBossRush.MOD_ID,
-        bus   = Mod.EventBusSubscriber.Bus.FORGE
-)
+@Mod.EventBusSubscriber(modid = ExtraBossRush.MOD_ID, bus   = Mod.EventBusSubscriber.Bus.FORGE)
 public class GoMEventSubscriber {
 
     // UUID -> 残り停止時間（tick単位）

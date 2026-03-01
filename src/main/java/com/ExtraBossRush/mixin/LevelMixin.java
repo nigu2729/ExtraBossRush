@@ -1,4 +1,4 @@
-package com.ExtraBossRush.mixin;
+/*package com.ExtraBossRush.mixin;
 
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.Entity;
@@ -35,4 +35,4 @@ public class LevelMixin {
             cir.setReturnValue(filteredList);
         }
     }
-}
+}*/

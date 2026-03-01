@@ -3,7 +3,7 @@ package com.ExtraBossRush;
 import com.ExtraBossRush.GoM.Entity.GoMEntities;
 import com.ExtraBossRush.GoM.Item.GoMItem;
 import com.ExtraBossRush.GoM.Item.GoMTabs;
-import com.ExtraBossRush.GoM.client.RandomKey;
+//import com.ExtraBossRush.GoM.client.RandomKey;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
