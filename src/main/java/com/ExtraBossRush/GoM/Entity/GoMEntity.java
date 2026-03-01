@@ -203,7 +203,9 @@ public class GoMEntity extends Monster {
             //this.RandomSkill(level,1);
             this.RandomSkill(level,2);
         }
-
+        if (this.tickCount % 600 == 0) {
+            this.RandomSkill(level,3);
+        }
         this.syncToNearbyPlayers(level);
         this.bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
         this.tickCount++;
@@ -371,10 +373,8 @@ public class GoMEntity extends Monster {
         @Override
         public void render(GoMEntity entity, float yaw, float partialTicks, @NotNull PoseStack poseStack, @NotNull MultiBufferSource buffer, int light) {
             if (entity.isDummy()) return;
-            System.out.println("Rendering GoMEntity: " + entity.getId() + " dummy=" + entity.isDummy() + " health=" + entity.getHealth() + " erosion=" + entity.getErosionFactor());
             super.render(entity, yaw, partialTicks, poseStack, buffer, light);
 
-            // ★ isHurt() == true の時に赤いベールを描画
             if (entity.isHurt()) {
                 poseStack.pushPose();
                 float fh = Mth.rotLerp(partialTicks, entity.yBodyRotO, entity.yBodyRot);
@@ -383,7 +383,7 @@ public class GoMEntity extends Monster {
                 poseStack.translate(0.0F, -1.501F, 0.0F);
                 VertexConsumer vcHurt = buffer.getBuffer(RenderType.entityTranslucentEmissive(TEXTURE));
                 int overlayHurt = OverlayTexture.pack(OverlayTexture.u(0.0F), OverlayTexture.v(true));
-                this.model.renderToBuffer(poseStack, vcHurt, light, overlayHurt, 1.0F, 0.0F, 0.0F, entity.getErosionFactor() * 0.3F);
+                this.model.renderToBuffer(poseStack, vcHurt, light, overlayHurt, 1.0F, 0.0F, 0.0F, 0.2F);
                 poseStack.popPose();
             }
 
@@ -400,11 +400,11 @@ public class GoMEntity extends Monster {
                 int overlay = OverlayTexture.pack(OverlayTexture.u(0.0F), OverlayTexture.v(entity.hurtTime > 0));
                 poseStack.pushPose();
                 poseStack.translate(((random.nextFloat() * 2.0F - 1.0F) * offset + ((rnd.nextFloat() - 0.5F) * 0.01F)), ((random.nextFloat() * 2.0F - 1.0F) * offset + ((rnd.nextFloat() - 0.5F) * 0.01F)), ((random.nextFloat() * 2.0F - 1.0F) * offset + ((rnd.nextFloat() - 0.5F) * 0.01F)));
-                this.model.renderToBuffer(poseStack, vc, light, overlay, 1.0F, 0.0F, 0.0F, 0.3F);
+                this.model.renderToBuffer(poseStack, vc, light, overlay, 1.0F, 0.0F, 0.0F, entity.getErosionFactor() * 0.3F);
                 poseStack.popPose();
                 poseStack.pushPose();
                 poseStack.translate(((random.nextFloat() * 2.0F - 1.0F) * offset + ((rnd.nextFloat() - 0.5F) * 0.01F)), ((random.nextFloat() * 2.0F - 1.0F) * offset + ((rnd.nextFloat() - 0.5F) * 0.01F)), ((random.nextFloat() * 2.0F - 1.0F) * offset + ((rnd.nextFloat() - 0.5F) * 0.01F)));
-                this.model.renderToBuffer(poseStack, vc, light, overlay, 0.0F, 1.0F, 1.0F, 0.3F);
+                this.model.renderToBuffer(poseStack, vc, light, overlay, 0.0F, 1.0F, 1.0F, entity.getErosionFactor() * 0.3F);
                 poseStack.popPose();
                 poseStack.popPose();
             }

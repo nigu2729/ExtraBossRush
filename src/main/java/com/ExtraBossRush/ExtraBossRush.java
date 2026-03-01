@@ -1,6 +1,7 @@
 package com.ExtraBossRush;
 
 import com.ExtraBossRush.GoM.Entity.GoMEntities;
+import com.ExtraBossRush.GoM.Entity.SkillEventHandler;
 import com.ExtraBossRush.GoM.Item.GoMItem;
 import com.ExtraBossRush.GoM.Item.GoMTabs;
 //import com.ExtraBossRush.GoM.client.RandomKey;
@@ -20,5 +21,6 @@ public class ExtraBossRush {
         GoMEntities.register(bus);
         GoMItem.register(bus);
         GoMTabs.register(bus);
+        SkillEventHandler.register();
     }
 }
