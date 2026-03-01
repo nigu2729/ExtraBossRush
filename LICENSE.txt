@@ -1,6 +1,11 @@
 Copyright (c) 2025-2026 tasogarerui (the "Primary Author")
 All rights reserved.
 
+---------------------------------------------------------------------------
+BY ACCESSING, VIEWING, OR DOWNLOADING ANY FILES WITHIN THIS MOD,
+YOU ARE AGREEING TO BE BOUND BY THE TERMS OF THIS LICENSE.
+---------------------------------------------------------------------------
+
 1. FINAL AUTHORITY AND OWNERSHIP
 The Primary Author holds absolute authority over this software. The Primary Author reserves the right to delete, revoke, or modify any contributor's status or granted rights at any time, for any reason, at their sole discretion.
 
