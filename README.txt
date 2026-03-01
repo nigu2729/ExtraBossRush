@@ -4,9 +4,9 @@ This code follows the Minecraft Forge installation methodology. It applies
 some small patches to the vanilla MCP source code, giving you and it access
 to the data and functions you need to build a successful mod.
 
-### ⚖️ LICENSE NOTICE
+⚖️ LICENSE NOTICE
 This project is governed by a custom license (see LICENSE file).
-**Section 3 of the license must be inherited and remain unmodified.** The Primary Author (tasogarerui) reserves all rights to the core logic.
+Section 3 of the license must be inherited and remain unmodified. The Primary Author (tasogarerui) reserves all rights to the core logic.
 
 Setup Process:
 ==============================
