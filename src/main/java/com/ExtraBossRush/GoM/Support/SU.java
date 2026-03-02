@@ -34,7 +34,11 @@ public class SU {
         double ErSq = Er * Er; // 半径の2乗
 
         return list.stream()
-                .filter(e -> e.position().distanceToSqr(center) <= ErSq)
+                .filter(e -> {
+                    // 足元ではなく体の中心で判定
+                    Vec3 entityCenter = e.position().add(0, e.getBbHeight() * 0.5, 0);
+                    return entityCenter.distanceToSqr(center) <= ErSq;
+                })
                 .collect(Collectors.toList());
     }
 }

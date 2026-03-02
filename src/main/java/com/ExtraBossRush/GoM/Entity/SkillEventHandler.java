@@ -1,6 +1,7 @@
 package com.ExtraBossRush.GoM.Entity;
 
 import com.ExtraBossRush.ExtraBossRush;
+import com.ExtraBossRush.GoM.ARV2Config;
 import com.ExtraBossRush.GoM.Entity.GoMEntity;
 import com.ExtraBossRush.GoM.Skill.GoMSkillEvent;
 import com.ExtraBossRush.GoM.Support.SU;
@@ -8,14 +9,16 @@ import com.ExtraBossRush.GoM.client.ARV2;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.level.Explosion;
@@ -23,9 +26,12 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.Level.ExplosionInteraction;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.DistExecutor;
 import net.minecraftforge.fml.common.Mod;
@@ -52,6 +58,14 @@ import java.util.function.Supplier;
 public class SkillEventHandler {
 
     private static final Random random = new Random();
+
+    // ====================== キルカウント ======================
+    private static int mobKillCount = 0;
+
+    @SubscribeEvent
+    public static void onLivingDeath(LivingDeathEvent event) {
+        if (!event.getEntity().level().isClientSide) mobKillCount++;
+    }
 
     // ====================== サーバー側タスク管理 ======================
     private static final List<DelayedSkillTask> SERVER_TASKS = new ArrayList<>();
@@ -85,26 +99,39 @@ public class SkillEventHandler {
             this.warmup = warmup;
             this.beamSize = beamSize;
         }
-
-        public boolean tick() {
+        // 年齢を進める
+        public void incrementAge() {
             age++;
-            if (age >= maxLife) return true;
-            if (age < warmup) return false;
-            float speed = 32.0f;
-            float maxLen = 512.0f;
-            float currentLen = Math.min(maxLen, speed * (age - warmup));
-            float scanStart = lastProcessedLen;
-            if (scanStart >= maxLen) return false;
-            float step = Math.max(1.0f, beamSize * 0.5f);
-            for (float d = scanStart; d < currentLen; d += step) {
-                Vec3 tip = start.add(dir.scale(d));
-                processTipImpact(tip, beamSize);
-            }
-            lastProcessedLen = currentLen;
-            return false;
         }
 
-        private void processTipImpact(Vec3 tip, float radius) {
+        // 終了判定
+        public boolean isExpired() {
+            return age >= maxLife;
+        }
+
+        // warmup中か
+        public boolean isWarmingUp() {
+            return age < warmup;
+        }
+
+        // 現在の長さ計算
+        public float getCurrentLen() {
+            float speed = 32.0f;
+            float maxLen = 512.0f;
+            return Math.min(maxLen, speed * Math.max(0, age - warmup));
+        }
+
+        // lastProcessedLen の getter / setter
+        public float getLastProcessedLen() {
+            return lastProcessedLen;
+        }
+
+        public void setLastProcessedLen(float value) {
+            lastProcessedLen = value;
+        }
+
+        // ブロック破壊処理（public）
+        public void processTipImpact(Vec3 tip, float radius) {
             int r = (int) Math.ceil(radius);
             int margin = 2;
             int rSq = (int) (radius * radius);
@@ -132,8 +159,52 @@ public class SkillEventHandler {
                 }
             }
         }
-    }
+        public void damageEntitiesAtTip(Vec3 tip, float radius) {
+            AABB aabb = new AABB(
+                    tip.x - radius, tip.y - radius, tip.z - radius,
+                    tip.x + radius, tip.y + radius, tip.z + radius
+            );
+            double rSq = (double) radius * radius;
+            level.getEntities((Entity) null, aabb, entity -> {
+                double dx = Math.max(0, Math.abs(entity.getX() - tip.x) - entity.getBbWidth() * 0.5);
+                double dy = Math.max(0, Math.abs(entity.getY() + entity.getBbHeight() * 0.5 - tip.y) - entity.getBbHeight() * 0.5);
+                double dz = Math.max(0, Math.abs(entity.getZ() - tip.z) - entity.getBbWidth() * 0.5);
+                return dx*dx + dy*dy + dz*dz <= rSq;
+            }).forEach(entity -> {
+                if (!(entity instanceof net.minecraft.world.entity.LivingEntity living)) return;
+                if (entity instanceof ServerPlayer player &&
+                        (player.isCreative() || player.isSpectator())) return;
+                if (entity instanceof ServerPlayer player) {
+                    if (GoMEventSubscriber.getRemainingResetTicks(player.getUUID()) < 5) {
+                        GoMEventSubscriber.requestResetInvulnerableTicks(player, 200);
+                    }
+                } else {
+                    living.invulnerableTime = 0;
+                }
+                living.hurt(level.damageSources().magic(), Integer.MAX_VALUE);
+                living.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN, 100, 4));
+                living.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.BLINDNESS, 100, 0));
+            });
+        }
 
+        // 新規追加：エンティティが円柱内にあるか判定（簡易中心点ベース）
+        public boolean isEntityInCylinder(Entity entity, float currentLen) {
+            Vec3 entityPos = entity.position();
+            Vec3 center = entityPos.add(0, entity.getBbHeight() * 0.5, 0);  // 中心調整
+
+            Vec3 toCenter = center.subtract(start);
+            double proj = toCenter.dot(dir);
+
+            if (proj < 0 || proj > currentLen) return false;
+
+            double distSq = toCenter.lengthSqr() - proj * proj;
+            double radiusSq = (double) beamSize * beamSize;
+
+            return distSq <= radiusSq;
+        }
+    }
     public static void addBeam(Level level, Vec3 start, Vec3 dir, int maxLife, int warmup, float beamSize) {
         ACTIVE_BEAMS.add(new BeamInstance(level, start, dir, maxLife, warmup, beamSize));
     }
@@ -222,17 +293,15 @@ public class SkillEventHandler {
         final ResourceLocation whitex  = new ResourceLocation(ExtraBossRush.MOD_ID, "textures/block/whi.png");
         final ResourceLocation blatex  = new ResourceLocation(ExtraBossRush.MOD_ID, "textures/block/bla.png");
         switch (skillId) {
-            case 1 -> {
-            }
-            case 2 -> {
-            }
+            case 1 -> {}
+            case 2 -> {}
             case 3 -> {
                 final int size = 10;
                 final int kan  = 20;
                 final int kan2 = 200;
-                final int Life = 800;
+                final int Life = 400;
                 for (int i = 0; i < 3; i++) {
-                    new ARV2.Builder(sqmodel, mhtex, pos.add(0, (10 * i - 1), 0)).setSize(size + (10 * i)).setAlphaAnim(new float[]{0, 0, 1, 1, 0}, new int[]{0, kan * i, kan * i, Life - 10, Life}).setRotAnim(new float[]{0, 0}, new float[]{0, 0}, new float[]{0, (float) ((1080 * (random.nextBoolean() ? 1 : -1) + (random.nextDouble() * 2 - 1) * 720))}, new int[]{0, Life}).setMaxLife(Life).spawn();
+                    new ARV2.Builder(sqmodel, mhtex, pos.add(0, (10 * i - 1), 0)).setSize(size + (10 * i)).setAlphaAnim(new float[]{0, 0, 1, 1, 0}, new int[]{0, kan * i, kan * i + (kan / 2), Life - 10, Life}).setRotAnim(new float[]{90,90}, new float[]{0,0}, new float[]{0, (float) ((1080 * (random.nextBoolean() ? 1 : -1) + (random.nextDouble() * 2 - 1) * 720))}, new int[]{0, Life}).setMaxLife(Life).spawn();
                 }
                 new ARV2.Builder(spmodel, whitex, pos.add(0, -10, 0)).setRot(90, 0, 0).setAlphaAnim(new float[]{1, 1, 0}, new int[]{0, Life - 10, Life}).setSizeAnim(new float[]{0, 5}, new int[]{0, kan2}).setMaxLife(Life).spawn();
                 new ARV2.Builder(bemodel, whitex, pos.add(0, -10, 0)).setRot(90, 0, 0).asBeam2(32.0f, 512.0f, 32.0f).setAlphaAnim(new float[]{0, 0, 1, 1, 0}, new int[]{0, kan2, kan2, Life - 10, Life}).setSize(5).setMaxLife(Life).spawn();
@@ -240,7 +309,7 @@ public class SkillEventHandler {
         }
     }
 
-    // ====================== GoMSkillEvent処理（SkillEventHandler優先） ======================
+    // ====================== GoMSkillEvent処理 ======================
     @SubscribeEvent
     public static void onGoMSkill(GoMSkillEvent event) {
         GoMEntity boss      = event.getBoss();
@@ -254,18 +323,14 @@ public class SkillEventHandler {
                 PE(boss, target, level);
             }
             case 2 -> {
-                float er = 128;
+                float er = 1024;
                 List<Entity> targets = SU.getEntitiesWithinRadius(
                         (ServerLevel) level, boss.getX(), boss.getY(), boss.getZ(), er);
                 for (Entity entity : targets) {
-                    if (entity != boss &&
-                            (entity instanceof Monster ||
-                                    (entity instanceof Mob mob && mob.getTarget() != null) ||
-                                    entity instanceof ServerPlayer)) {
-                        AK(boss, entity, level);
-                    }
+                    if (entity == boss || entity instanceof GoMEntity) continue;
+                    if (entity instanceof ServerPlayer player && (player.isCreative() || player.isSpectator())) continue;
+                    AK(boss, entity, level);
                 }
-
             }
             case 3 -> {
                 Vec3 center  = new Vec3(boss.getX(), 150, boss.getZ());
@@ -283,11 +348,20 @@ public class SkillEventHandler {
                     double r = radius * Math.sqrt(random.nextDouble());
                     double x = Math.cos(angle) * r;
                     double z = Math.sin(angle) * r;
-                    Vec3 spawnPos = new Vec3(
-                            center.x + x, 150, center.z + z
-                    );
+                    Vec3 spawnPos = new Vec3(center.x + x, 150, center.z + z);
                     if (!level.isClientSide) {
-                        addSkillTask(level, target.getUUID(), level.getGameTime() + delayTicks , skillId, spawnPos, beamDir);
+                        addSkillTask(level, target.getUUID(), level.getGameTime() + delayTicks, skillId, spawnPos, beamDir);
+                    }
+                }
+                radius = 1024;
+                for (int i = 0; i < 100; i++) {
+                    double angle = random.nextDouble() * 2 * Math.PI;
+                    double r = radius * Math.sqrt(random.nextDouble());
+                    double x = Math.cos(angle) * r;
+                    double z = Math.sin(angle) * r;
+                    Vec3 spawnPos = new Vec3(center.x + x, 150, center.z + z);
+                    if (!level.isClientSide) {
+                        addSkillTask(level, target.getUUID(), level.getGameTime() + delayTicks, skillId, spawnPos, beamDir);
                     }
                 }
             }
@@ -297,10 +371,9 @@ public class SkillEventHandler {
     // ====================== Tick処理 ======================
     @SubscribeEvent
     public static void onLevelTick(TickEvent.LevelTickEvent event) {
-        if (event.phase != TickEvent.Phase.START || event.level.isClientSide) return;
-
-        long currentTime = event.level.getGameTime();
-
+        if (event.phase != TickEvent.Phase.END || event.level.isClientSide) return;
+        ServerLevel level = (ServerLevel) event.level;
+        long currentTime = level.getGameTime();
         Iterator<DelayedSkillTask> it = SERVER_TASKS.iterator();
         while (it.hasNext()) {
             DelayedSkillTask task = it.next();
@@ -314,29 +387,73 @@ public class SkillEventHandler {
             sendEffectToClients(event.level, task.pos, task.skillId);
             it.remove();
         }
+        Iterator<BeamInstance> beamIt = ACTIVE_BEAMS.iterator();
+        while (beamIt.hasNext()) {
+            BeamInstance beam = beamIt.next();
 
-        ACTIVE_BEAMS.removeIf(beam -> {
-            if (beam.level == event.level) {
-                return beam.tick();
+            if (beam.level != level) {  // ← event.level → level
+                beamIt.remove();
+                continue;
             }
-            return false;
-        });
-    }
 
+            beam.incrementAge();
+
+            if (beam.isExpired()) {
+                beamIt.remove();
+                continue;
+            }
+            if (beam.isWarmingUp()) continue;
+            float currentLen = beam.getCurrentLen();
+            if (ARV2Config.SERVER_SPEC.isLoaded() && ARV2Config.ENABLE_BEAM_BREAK.get()) {
+                float scanStartBlock = beam.getLastProcessedLen();
+                float step = Math.max(1.0f, beam.beamSize - 0.5f);
+                for (float d = scanStartBlock; d < currentLen; d += step) {
+                    Vec3 tip = beam.start.add(beam.dir.scale(d));
+                    beam.processTipImpact(tip, beam.beamSize);
+                }
+            }
+            Vec3 end = beam.start.add(beam.dir.scale(currentLen));
+            double margin = beam.beamSize + 2.0;
+            AABB cylinderAABB = new AABB(
+                    Math.min(beam.start.x, end.x) - margin, Math.min(beam.start.y, end.y) - margin, Math.min(beam.start.z, end.z) - margin,
+                    Math.max(beam.start.x, end.x) + margin, Math.max(beam.start.y, end.y) + margin, Math.max(beam.start.z, end.z) + margin
+            );
+            level.getEntities((Entity) null, cylinderAABB, e -> e instanceof LivingEntity)
+                    .forEach(entity -> {
+                        LivingEntity living = (LivingEntity) entity;  // ← キャストOKになる
+                        if (living instanceof ServerPlayer player && (player.isCreative() || player.isSpectator())) return;
+                        if (beam.isEntityInCylinder(entity, currentLen)) {
+                            if (living instanceof ServerPlayer player) {
+                                if (GoMEventSubscriber.getRemainingResetTicks(player.getUUID()) < 5) {
+                                    GoMEventSubscriber.requestResetInvulnerableTicks(player, 200);
+                                }
+                            } else {
+                                living.invulnerableTime = 0;
+                            }
+
+                            living.hurt(level.damageSources().magic(), 20.0f);  // ← int → float に修正（1.20+対応）
+                            living.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 100, 4));
+                            living.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 100, 0));
+                        }
+                    });
+
+            beam.setLastProcessedLen(currentLen);
+        }
+    }
     // ====================== サーバーロジック ======================
     private static void executeServerLogic(Level level, DelayedSkillTask task) {
         switch (task.skillId) {
-            case 1 -> {}
-            case 2 -> {}
+            case 1 -> {
+            }
+            case 2 -> {
+            }
             case 3 -> {
                 if (task.beamDir != null) {
-                    float beamSize = 5.0f;
-                    addBeam(level, task.pos, task.beamDir, 800, 200, beamSize);
+                    addBeam(level, task.pos, task.beamDir, 400, 200, 5.0f);
                 }
             }
         }
     }
-
     // ====================== タスク登録ヘルパー ======================
     private static void addSkillTask(Level level, UUID casterId, long executeAt,
                                      int skillId, Vec3 pos, Vec3 beamDir) {
@@ -358,45 +475,31 @@ public class SkillEventHandler {
         );
     }
 
-    // ====================== PE / AK（SkillEventHandler優先） ======================
+    // ====================== PE / AK ======================
     private static void PE(GoMEntity boss, ServerPlayer target, Level level) {
         Random rand = new Random();
         double offsetX = (rand.nextDouble() - 0.5) * 25.0;
         double offsetZ = (rand.nextDouble() - 0.5) * 25.0;
-
         double x = target.getX() + offsetX;
         double y = target.getY() + 5.0;
         double z = target.getZ() + offsetZ;
-
         Explosion explosion = level.explode(boss, x, y, z, 25.0F, ExplosionInteraction.NONE);
-        if (explosion != null) {
-            explosion.finalizeExplosion(false);
-        }
-
+        if (explosion != null) explosion.finalizeExplosion(false);
         target.setDeltaMovement(0, 0, 0);
-        ServerGamePacketListenerImpl conn = target.connection;
-        conn.send(new ClientboundSetEntityMotionPacket(target));
+        target.connection.send(new ClientboundSetEntityMotionPacket(target));
     }
-
     private static void AK(GoMEntity boss, Entity entity, Level level) {
-        Random rand = new Random();
-        double offsetX = (rand.nextDouble() - 0.5) * 25.0;
-        double offsetZ = (rand.nextDouble() - 0.5) * 25.0;
-
-        Explosion explosion = level.explode(
-                boss,
-                entity.getX() + offsetX, entity.getY() + 5.0, entity.getZ() + offsetZ,
-                25.0F,
-                ExplosionInteraction.NONE
-        );
-        if (explosion != null) {
-            explosion.finalizeExplosion(false);
-        }
-
-        entity.setDeltaMovement(0, 0, 0);
-        if (entity instanceof ServerPlayer serverPlayer) {
-            ServerGamePacketListenerImpl conn = serverPlayer.connection;
-            conn.send(new ClientboundSetEntityMotionPacket(serverPlayer));
-        }
+        if (!(entity instanceof net.minecraft.world.entity.LivingEntity living)) return;
+        float killRatio = Math.min(0.9999f,
+                (float)(Math.log(1 + mobKillCount) / Math.log(1 + 10000)));
+        float maxHpInWorld = ((ServerLevel) level).players().stream()
+                .map(p -> p.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH))
+                .map(Double::floatValue)
+                .max(Float::compareTo)
+                .orElse(20.0f);
+        float newHealth = living.getHealth() - (living.getMaxHealth() * 0.1f + Math.max(maxHpInWorld, living.getMaxHealth()) * killRatio * 0.9f);
+        living.setHealth(Math.max(0.0f, newHealth));
+        living.animateHurt(0.0f);
+        if (newHealth <= 0) living.kill();
     }
 }

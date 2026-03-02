@@ -61,6 +61,8 @@ public class GoMEntity extends Monster {
     private static final EntityDataAccessor<Boolean> DATA_IS_HURT = SynchedEntityData.defineId(GoMEntity.class, EntityDataSerializers.BOOLEAN);
     private UUID linkedId;
     private GoMEntity dummyRef;
+    private int lastSkill2Tick = 0;
+    private int lastSkill3Tick = 0;
     private long lastHurtTick = 0;
     private static final long HURT_COOLDOWN_TICKS = 10;
     private long lastMasterCheckTick = 0;
@@ -199,12 +201,13 @@ public class GoMEntity extends Monster {
             this.remove(RemovalReason.KILLED);
             return;
         }
-        if (this.tickCount % 100 == 0) {
-            //this.RandomSkill(level,1);
-            this.RandomSkill(level,2);
+        if (this.tickCount - lastSkill2Tick >= 100) {
+            lastSkill2Tick = this.tickCount;
+            this.RandomSkill(level, 2);
         }
-        if (this.tickCount % 600 == 0) {
-            this.RandomSkill(level,3);
+        if (this.tickCount - lastSkill3Tick >= 600) {
+            lastSkill3Tick = this.tickCount;
+            this.RandomSkill(level, 3);
         }
         this.syncToNearbyPlayers(level);
         this.bossEvent.setProgress(this.getHealth() / this.getMaxHealth());
