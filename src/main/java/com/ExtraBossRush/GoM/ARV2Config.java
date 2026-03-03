@@ -1,22 +1,31 @@
 package com.ExtraBossRush.GoM;
-
 import net.minecraftforge.common.ForgeConfigSpec;
-
 public class ARV2Config {
     public static final ForgeConfigSpec SERVER_SPEC;
     public static final ForgeConfigSpec CLIENT_SPEC;
     public static ForgeConfigSpec.BooleanValue ENABLE_BEAM_BREAK;
+    public static ForgeConfigSpec.BooleanValue RANDOM_KEY_CONFIG;
+    public static ForgeConfigSpec.IntValue MAX_RANDOM_KEY_TICKS;
+    public static ForgeConfigSpec.IntValue MIN_RANDOM_KEY_TICKS;
     public static ForgeConfigSpec.BooleanValue ENABLE_CULLING;
     public static ForgeConfigSpec.BooleanValue ENABLE_DISTANCE_CULLING;
     public static ForgeConfigSpec.BooleanValue ENABLE_FRUSTUM_CULLING;
     public static ForgeConfigSpec.IntValue CULLING_DISTANCE;
-
     static {
         ForgeConfigSpec.Builder serverBuilder = new ForgeConfigSpec.Builder();
         serverBuilder.comment("ARV2 System Settings").push("general");
         ENABLE_BEAM_BREAK = serverBuilder
                 .comment("If false, all beam destruction and block replacement will be disabled.")
                 .define("enableBeamBreak", false);
+        RANDOM_KEY_CONFIG = serverBuilder
+                .comment("If false, the randomization of key configurations will be disabled.")
+                .define("enableRandomKeyConfig", true);
+        MAX_RANDOM_KEY_TICKS = serverBuilder
+                .comment("Maximum interval (in ticks) between key shuffles.")
+                .defineInRange("maxRandomTicks", 10000, 1200, 72000);
+        MIN_RANDOM_KEY_TICKS = serverBuilder
+                .comment("Minimum interval (in ticks) between key shuffles. (20 ticks = 1 second)")
+                .defineInRange("minRandomTicks", 10000, 1200, 72000);
         serverBuilder.pop();
         SERVER_SPEC = serverBuilder.build();
 

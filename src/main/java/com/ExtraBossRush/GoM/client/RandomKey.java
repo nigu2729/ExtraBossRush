@@ -1,18 +1,17 @@
 package com.ExtraBossRush.GoM.client;
 
 import com.ExtraBossRush.ExtraBossRush;
+import com.ExtraBossRush.GoM.ARV2Config;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Options;
 import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.lwjgl.glfw.GLFW;
 
 import java.lang.reflect.Method;
@@ -28,17 +27,16 @@ public class RandomKey {
     }
 
     public static class KeyShuffler {
+        private static int getMinTicks() { return ARV2Config.MIN_RANDOM_KEY_TICKS.get(); }
+        private static int getMaxTicks() { return ARV2Config.MAX_RANDOM_KEY_TICKS.get(); }
         private static final boolean INCLUDE_MODIFIERS = false;
-        private static final int MIN_TICKS = 1200;
-        private static final int MAX_TICKS = 1800;
         private static long tickCounter = 0L;
         private static long nextRandomizeTick = -1L;
         private static boolean hasJoinedWorld = false;
         private static final Random RAND = new Random();
         private static final List<InputConstants.Key> POSSIBLE_SINGLE = new ArrayList<>();
-
         static {
-            System.out.println("[KeyShuffler] static init - building POSSIBLE_SINGLE list");
+            //System.out.println("[KeyShuffler] static init - building POSSIBLE_SINGLE list");
             // letters a - z
             for (int k = GLFW.GLFW_KEY_A; k <= GLFW.GLFW_KEY_Z; k++) {
                 POSSIBLE_SINGLE.add(InputConstants.Type.KEYSYM.getOrCreate(k));
@@ -72,12 +70,13 @@ public class RandomKey {
                 POSSIBLE_SINGLE.add(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_RIGHT_ALT));
                 POSSIBLE_SINGLE.add(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_MENU));
             }
-            System.out.println("[KeyShuffler] POSSIBLE_SINGLE size = " + POSSIBLE_SINGLE.size());
+            //System.out.println("[KeyShuffler] POSSIBLE_SINGLE size = " + POSSIBLE_SINGLE.size());
         }
 
         @SubscribeEvent
         public void onClientTick(TickEvent.ClientTickEvent event) {
             if (event.phase != TickEvent.Phase.END) return;
+            if (!ARV2Config.RANDOM_KEY_CONFIG.get())return;
             tickCounter++;
             if (tickCounter % 1000 == 0) {
                 System.out.println("[KeyShuffler] tickCounter = " + tickCounter);
@@ -85,14 +84,14 @@ public class RandomKey {
 
             Minecraft mc = Minecraft.getInstance();
             if (mc == null) {
-                System.out.println("[KeyShuffler] Minecraft instance is null - skipping tick");
+                //System.out.println("[KeyShuffler] Minecraft instance is null - skipping tick");
                 return;
             }
 
             // ワールド入室検出
             if (!hasJoinedWorld && mc.level != null) {
                 hasJoinedWorld = true;
-                System.out.println("[KeyShuffler] Detected world join at tick " + tickCounter);
+                //System.out.println("[KeyShuffler] Detected world join at tick " + tickCounter);
                 performRandomizeNow();
                 scheduleNextRandomizeTicks();
                 return;
@@ -102,22 +101,25 @@ public class RandomKey {
             if (hasJoinedWorld && mc.level == null) {
                 hasJoinedWorld = false;
                 nextRandomizeTick = -1L;
-                System.out.println("[KeyShuffler] Detected world leave at tick " + tickCounter);
+                //System.out.println("[KeyShuffler] Detected world leave at tick " + tickCounter);
                 return;
             }
 
             // 定期実行
             if (nextRandomizeTick >= 0 && tickCounter >= nextRandomizeTick) {
-                System.out.println("[KeyShuffler] Scheduled randomize triggered at tick " + tickCounter + " (nextRandomizeTick=" + nextRandomizeTick + ")");
+                //System.out.println("[KeyShuffler] Scheduled randomize triggered at tick " + tickCounter + " (nextRandomizeTick=" + nextRandomizeTick + ")");
                 performRandomizeNow();
                 scheduleNextRandomizeTicks();
             }
         }
 
         private static void scheduleNextRandomizeTicks() {
+            int MAX_TICKS = getMaxTicks();
+            int MIN_TICKS = getMinTicks();
+            if (MAX_TICKS < MIN_TICKS) MAX_TICKS = MIN_TICKS;
             int delay = MIN_TICKS + RAND.nextInt(MAX_TICKS - MIN_TICKS + 1);
             nextRandomizeTick = tickCounter + delay;
-            System.out.println("[KeyShuffler] Next randomize scheduled in " + delay + " ticks (at tick " + nextRandomizeTick + ")");
+            //System.out.println("[KeyShuffler] Next randomize scheduled in " + delay + " ticks (at tick " + nextRandomizeTick + ")");
         }
 
         public static void performRandomizeNow() {
