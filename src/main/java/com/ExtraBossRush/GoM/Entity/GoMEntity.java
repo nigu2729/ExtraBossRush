@@ -2,8 +2,11 @@ package com.ExtraBossRush.GoM.Entity;
 import com.ExtraBossRush.ExtraBossRush;
 import com.ExtraBossRush.GoM.Support.PSU;
 import com.ExtraBossRush.GoM.Skill.GoMSkillEvent;
+import com.ExtraBossRush.GoM.client.RandomKey;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -11,6 +14,7 @@ import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.MobRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.*;
@@ -125,19 +129,73 @@ public class GoMEntity extends Monster {
             }
         }
     }
-    @SubscribeEvent
-    public static void onRegisterCommands(RegisterCommandsEvent event) {
-        event.getDispatcher().register(
-                Commands.literal("gomentity")
-                        .requires(s -> s.hasPermission(2))
-                        .executes(c -> {
-                            ServerPlayer player = c.getSource().getPlayerOrException();
-                            Vec3 spawnPos = player.position().add(player.getLookAngle().scale(5));
-                            String id = generateUniqueId();
-                            MASTER_LIST.add(new GoMMasterLogic(id, player.serverLevel(), spawnPos));
-                            return 1;
-                        })
-        );
+    @Mod.EventBusSubscriber(modid = ExtraBossRush.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+    public class KeyCommands {
+
+        @SubscribeEvent
+        public static void onRegisterCommands(RegisterCommandsEvent event) {
+            CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
+            dispatcher.register(
+                    Commands.literal("keybackup")
+                            .requires(source -> source.hasPermission(2))
+                            .then(Commands.literal("save")
+                                    .then(Commands.argument("slot", StringArgumentType.string())
+                                            .executes(ctx -> {
+                                                String slot = StringArgumentType.getString(ctx, "slot");
+                                                RandomKey.KeyShuffler.backupKeys(slot);
+                                                ctx.getSource().sendSuccess(
+                                                        () -> Component.literal("キーバインドを '" + slot + "' に保存しました"),
+                                                        false
+                                                );
+                                                return 1;
+                                            })
+                                    )
+                                    .executes(ctx -> {
+                                        RandomKey.KeyShuffler.backupKeys("manual");
+                                        ctx.getSource().sendSuccess(
+                                                () -> Component.literal("キーバインドを 'manual' に保存しました"),
+                                                false
+                                        );
+                                        return 1;
+                                    })
+                            )
+                            .then(Commands.literal("load")
+                                    .then(Commands.argument("slot", StringArgumentType.string())
+                                            .executes(ctx -> {
+                                                String slot = StringArgumentType.getString(ctx, "slot");
+                                                boolean success = RandomKey.KeyShuffler.restoreKeys(slot);
+                                                if (success) {
+                                                    ctx.getSource().sendSuccess(
+                                                            () -> Component.literal("キーバインドを '" + slot + "' から復元しました"),
+                                                            false
+                                                    );
+                                                    return 1;
+                                                } else {
+                                                    ctx.getSource().sendFailure(
+                                                            Component.literal("バックアップ '" + slot + "' が見つかりません")
+                                                    );
+                                                    return 0;
+                                                }
+                                            })
+                                    )
+                                    .executes(ctx -> {
+                                        ctx.getSource().sendFailure(Component.literal("復元するスロット名を指定してください"));
+                                        return 0;
+                                    })
+                            )
+            );
+            dispatcher.register(
+                    Commands.literal("gomentity")
+                            .requires(source -> source.hasPermission(2))
+                            .executes(ctx -> {
+                                ServerPlayer player = ctx.getSource().getPlayerOrException();
+                                Vec3 spawnPos = player.position().add(player.getLookAngle().scale(5));
+                                String id = generateUniqueId();
+                                MASTER_LIST.add(new GoMMasterLogic(id, player.serverLevel(), spawnPos));
+                                return 1;
+                            })
+            );
+        }
     }
     @SubscribeEvent
     public static void onLevelTick(TickEvent.LevelTickEvent event) {

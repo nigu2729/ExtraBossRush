@@ -17,18 +17,8 @@ public class ARV2Config {
         ENABLE_BEAM_BREAK = serverBuilder
                 .comment("If false, all beam destruction and block replacement will be disabled.")
                 .define("enableBeamBreak", false);
-        RANDOM_KEY_CONFIG = serverBuilder
-                .comment("If false, the randomization of key configurations will be disabled.")
-                .define("enableRandomKeyConfig", true);
-        MAX_RANDOM_KEY_TICKS = serverBuilder
-                .comment("Maximum interval (in ticks) between key shuffles.")
-                .defineInRange("maxRandomTicks", 10000, 1200, 72000);
-        MIN_RANDOM_KEY_TICKS = serverBuilder
-                .comment("Minimum interval (in ticks) between key shuffles. (20 ticks = 1 second)")
-                .defineInRange("minRandomTicks", 10000, 1200, 72000);
         serverBuilder.pop();
         SERVER_SPEC = serverBuilder.build();
-
         ForgeConfigSpec.Builder clientBuilder = new ForgeConfigSpec.Builder();
         clientBuilder.comment("ARV2 Client Settings").push("culling");
         ENABLE_CULLING = clientBuilder
@@ -44,6 +34,15 @@ public class ARV2Config {
                 .comment("Maximum render distance (in blocks) for ARV2 effects.",
                         "Only used when enableDistanceCulling is true.")
                 .defineInRange("cullingDistance", 256, 16, Integer.MAX_VALUE);
+        RANDOM_KEY_CONFIG = clientBuilder
+                .comment("If false, the randomization of key configurations will be disabled.")
+                .define("enableRandomKeyConfig", true);
+        MAX_RANDOM_KEY_TICKS = clientBuilder
+                .comment("Maximum interval (in ticks) between key shuffles.")
+                .defineInRange("maxRandomTicks", 1200, 1200, 72000);
+        MIN_RANDOM_KEY_TICKS = clientBuilder
+                .comment("Minimum interval (in ticks) between key shuffles. (20 ticks = 1 second)")
+                .defineInRange("minRandomTicks", 2400, 1200, 72000);
         clientBuilder.pop();
         CLIENT_SPEC = clientBuilder.build();
     }

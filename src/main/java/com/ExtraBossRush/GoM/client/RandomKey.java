@@ -2,6 +2,8 @@ package com.ExtraBossRush.GoM.client;
 
 import com.ExtraBossRush.ExtraBossRush;
 import com.ExtraBossRush.GoM.ARV2Config;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -13,11 +15,21 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import org.lwjgl.glfw.GLFW;
-
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import java.io.Reader;
+import java.io.Writer;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
 
 @Mod.EventBusSubscriber(modid = ExtraBossRush.MOD_ID , bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public class RandomKey {
@@ -25,7 +37,6 @@ public class RandomKey {
     public static void clientSetup(FMLClientSetupEvent event) {
         MinecraftForge.EVENT_BUS.register(new KeyShuffler());
     }
-
     public static class KeyShuffler {
         private static int getMinTicks() { return ARV2Config.MIN_RANDOM_KEY_TICKS.get(); }
         private static int getMaxTicks() { return ARV2Config.MAX_RANDOM_KEY_TICKS.get(); }
@@ -35,6 +46,68 @@ public class RandomKey {
         private static boolean hasJoinedWorld = false;
         private static final Random RAND = new Random();
         private static final List<InputConstants.Key> POSSIBLE_SINGLE = new ArrayList<>();
+        private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+        private static final Path BACKUP_DIR = Minecraft.getInstance().gameDirectory.toPath()
+                .resolve("config")
+                .resolve(ExtraBossRush.MOD_ID)
+                .resolve("keybackup");
+        public static void backupKeys(String slotName) {
+            try {
+                Files.createDirectories(BACKUP_DIR);
+                Map<String, String> backup = new HashMap<>();
+                Options options = Minecraft.getInstance().options;
+                for (KeyMapping mapping : options.keyMappings) {
+                    if (mapping == null) continue;
+                    backup.put(mapping.getName(), mapping.getKey().getName());
+                }
+                JsonObject json = new JsonObject();
+                backup.forEach(json::addProperty);
+                Path file = BACKUP_DIR.resolve(slotName + ".json");
+                try (Writer writer = Files.newBufferedWriter(file)) {
+                    GSON.toJson(json, writer);
+                }
+                System.out.println("[KeyShuffler] 保存完了: " + file);
+            } catch (Exception e) {
+                System.err.println("[KeyShuffler] バックアップ失敗: " + e);
+            }
+        }
+        public static boolean restoreKeys(String slotName) {
+            Path file = BACKUP_DIR.resolve(slotName + ".json");
+            if (!Files.exists(file)) {
+                System.out.println("[KeyShuffler] バックアップが見つかりません: " + file);
+                return false;
+            }
+            try (Reader reader = Files.newBufferedReader(file)) {
+                JsonObject json = GSON.fromJson(reader, JsonObject.class);
+                Options options = Minecraft.getInstance().options;
+                int restoredCount = 0;
+                for (KeyMapping mapping : options.keyMappings) {
+                    if (mapping == null) continue;
+                    String name = mapping.getName();
+                    if (json.has(name)) {
+                        String keyName = json.get(name).getAsString();
+                        InputConstants.Key key = InputConstants.getKey(keyName);
+                        if (key != InputConstants.UNKNOWN) {
+                            mapping.setKey(key);
+                            restoredCount++;
+                            System.out.println("[KeyShuffler] 復元: " + name + " → " + key.getName());
+                        }
+                    }
+                }
+                KeyMapping.resetMapping();
+                try {
+                    options.save();
+                    System.out.println("[KeyShuffler] options 保存完了");
+                } catch (Exception e) {
+                    System.err.println("[KeyShuffler] options 保存失敗: " + e);
+                }
+                System.out.println("[KeyShuffler] " + restoredCount + " 個のキーを復元しました");
+                return restoredCount > 0;
+            } catch (Exception e) {
+                System.err.println("[KeyShuffler] 復元処理失敗: " + e);
+                return false;
+            }
+        }
         static {
             //System.out.println("[KeyShuffler] static init - building POSSIBLE_SINGLE list");
             // letters a - z
