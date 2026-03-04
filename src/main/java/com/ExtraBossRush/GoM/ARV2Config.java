@@ -2,6 +2,7 @@ package com.ExtraBossRush.GoM;
 import net.minecraftforge.common.ForgeConfigSpec;
 public class ARV2Config {
     public static final ForgeConfigSpec SERVER_SPEC;
+    public static final ForgeConfigSpec COMMON_SPEC;
     public static final ForgeConfigSpec CLIENT_SPEC;
     public static ForgeConfigSpec.BooleanValue ENABLE_BEAM_BREAK;
     public static ForgeConfigSpec.BooleanValue RANDOM_KEY_CONFIG;
@@ -19,6 +20,19 @@ public class ARV2Config {
                 .define("enableBeamBreak", false);
         serverBuilder.pop();
         SERVER_SPEC = serverBuilder.build();
+        ForgeConfigSpec.Builder commonBuilder = new ForgeConfigSpec.Builder();
+        commonBuilder.comment("Random Key Settings").push("random key");
+        RANDOM_KEY_CONFIG = commonBuilder
+                .comment("If false, the randomization of key configurations will be disabled.")
+                .define("enableRandomKeyConfig", true);
+        MAX_RANDOM_KEY_TICKS = commonBuilder
+                .comment("Maximum interval (in ticks) between key shuffles.")
+                .defineInRange("maxRandomTicks", 2400, 0, Integer.MAX_VALUE);
+        MIN_RANDOM_KEY_TICKS = commonBuilder
+                .comment("Minimum interval (in ticks) between key shuffles. (20 ticks = 1 second)")
+                .defineInRange("minRandomTicks", 1200, 0, Integer.MAX_VALUE);
+        commonBuilder.pop();
+        COMMON_SPEC = commonBuilder.build();
         ForgeConfigSpec.Builder clientBuilder = new ForgeConfigSpec.Builder();
         clientBuilder.comment("ARV2 Client Settings").push("culling");
         ENABLE_CULLING = clientBuilder
@@ -34,15 +48,6 @@ public class ARV2Config {
                 .comment("Maximum render distance (in blocks) for ARV2 effects.",
                         "Only used when enableDistanceCulling is true.")
                 .defineInRange("cullingDistance", 256, 16, Integer.MAX_VALUE);
-        RANDOM_KEY_CONFIG = clientBuilder
-                .comment("If false, the randomization of key configurations will be disabled.")
-                .define("enableRandomKeyConfig", true);
-        MAX_RANDOM_KEY_TICKS = clientBuilder
-                .comment("Maximum interval (in ticks) between key shuffles.")
-                .defineInRange("maxRandomTicks", 1200, 1200, 72000);
-        MIN_RANDOM_KEY_TICKS = clientBuilder
-                .comment("Minimum interval (in ticks) between key shuffles. (20 ticks = 1 second)")
-                .defineInRange("minRandomTicks", 2400, 1200, 72000);
         clientBuilder.pop();
         CLIENT_SPEC = clientBuilder.build();
     }

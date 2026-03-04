@@ -22,6 +22,7 @@ public class ExtraBossRush {
     public ExtraBossRush() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ARV2Config.SERVER_SPEC);
+        ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, ARV2Config.COMMON_SPEC);
         ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, ARV2Config.CLIENT_SPEC);
         GoMEntities.register(bus);
         GoMItem.register(bus);

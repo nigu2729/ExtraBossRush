@@ -1,9 +1,9 @@
 package com.ExtraBossRush.GoM.client;
-
 import com.ExtraBossRush.ExtraBossRush;
 import com.ExtraBossRush.GoM.ARV2Config;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -13,24 +13,15 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import org.lwjgl.glfw.GLFW;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import java.io.Reader;
-import java.io.Writer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 import java.io.Reader;
 import java.io.Writer;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-
 @Mod.EventBusSubscriber(modid = ExtraBossRush.MOD_ID , bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public class RandomKey {
     @SubscribeEvent
@@ -38,6 +29,10 @@ public class RandomKey {
         MinecraftForge.EVENT_BUS.register(new KeyShuffler());
     }
     public static class KeyShuffler {
+        private static boolean configReady = false;
+        private static boolean enableRandomKey = true;   // デフォルト
+        private static long minTicks = 2400;
+        private static long maxTicks = 1200;
         private static int getMinTicks() { return ARV2Config.MIN_RANDOM_KEY_TICKS.get(); }
         private static int getMaxTicks() { return ARV2Config.MAX_RANDOM_KEY_TICKS.get(); }
         private static final boolean INCLUDE_MODIFIERS = false;
@@ -51,6 +46,16 @@ public class RandomKey {
                 .resolve("config")
                 .resolve(ExtraBossRush.MOD_ID)
                 .resolve("keybackup");
+        @SubscribeEvent
+        public static void onConfigLoaded(ModConfigEvent.Loading event) {
+            if (event.getConfig().getSpec() == ARV2Config.COMMON_SPEC) {
+                enableRandomKey = ARV2Config.RANDOM_KEY_CONFIG.get();
+                minTicks = ARV2Config.MIN_RANDOM_KEY_TICKS.get();
+                maxTicks = ARV2Config.MAX_RANDOM_KEY_TICKS.get();
+                configReady = true;
+                System.out.println("[KeyShuffler] COMMON config loaded - RandomKey enabled: " + enableRandomKey);
+            }
+        }
         public static void backupKeys(String slotName) {
             try {
                 Files.createDirectories(BACKUP_DIR);
@@ -130,7 +135,6 @@ public class RandomKey {
             POSSIBLE_SINGLE.add(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_EQUAL));
             POSSIBLE_SINGLE.add(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_BACKSLASH));
             POSSIBLE_SINGLE.add(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_GRAVE_ACCENT));
-
             if (INCLUDE_MODIFIERS) {
                 POSSIBLE_SINGLE.add(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_LEFT_SHIFT));
                 POSSIBLE_SINGLE.add(InputConstants.Type.KEYSYM.getOrCreate(GLFW.GLFW_KEY_RIGHT_SHIFT));
@@ -145,23 +149,18 @@ public class RandomKey {
             }
             //System.out.println("[KeyShuffler] POSSIBLE_SINGLE size = " + POSSIBLE_SINGLE.size());
         }
-
         @SubscribeEvent
         public void onClientTick(TickEvent.ClientTickEvent event) {
-            if (event.phase != TickEvent.Phase.END) return;
-            if (!ARV2Config.RANDOM_KEY_CONFIG.get())return;
+            if (event.phase != TickEvent.Phase.END || !configReady || !enableRandomKey) return;
             tickCounter++;
             if (tickCounter % 1000 == 0) {
                 System.out.println("[KeyShuffler] tickCounter = " + tickCounter);
             }
-
             Minecraft mc = Minecraft.getInstance();
             if (mc == null) {
                 //System.out.println("[KeyShuffler] Minecraft instance is null - skipping tick");
                 return;
             }
-
-            // ワールド入室検出
             if (!hasJoinedWorld && mc.level != null) {
                 hasJoinedWorld = true;
                 //System.out.println("[KeyShuffler] Detected world join at tick " + tickCounter);
@@ -169,34 +168,28 @@ public class RandomKey {
                 scheduleNextRandomizeTicks();
                 return;
             }
-
-            // ワールド離脱検出
             if (hasJoinedWorld && mc.level == null) {
                 hasJoinedWorld = false;
                 nextRandomizeTick = -1L;
                 //System.out.println("[KeyShuffler] Detected world leave at tick " + tickCounter);
                 return;
             }
-
-            // 定期実行
             if (nextRandomizeTick >= 0 && tickCounter >= nextRandomizeTick) {
                 //System.out.println("[KeyShuffler] Scheduled randomize triggered at tick " + tickCounter + " (nextRandomizeTick=" + nextRandomizeTick + ")");
                 performRandomizeNow();
                 scheduleNextRandomizeTicks();
             }
         }
-
         private static void scheduleNextRandomizeTicks() {
-            int MAX_TICKS = getMaxTicks();
-            int MIN_TICKS = getMinTicks();
-            if (MAX_TICKS < MIN_TICKS) MAX_TICKS = MIN_TICKS;
-            int delay = MIN_TICKS + RAND.nextInt(MAX_TICKS - MIN_TICKS + 1);
+            long max = getMaxTicks();
+            long min = getMinTicks();
+            if (max < min) max = min;
+            long range = max - min + 1;
+            long delay = min + (range > 0 ? RAND.nextLong(range) : 0);
             nextRandomizeTick = tickCounter + delay;
             //System.out.println("[KeyShuffler] Next randomize scheduled in " + delay + " ticks (at tick " + nextRandomizeTick + ")");
         }
-
         public static void performRandomizeNow() {
-
             System.out.println("[KeyShuffler] performRandomizeNow start (tick=" + tickCounter + ")");
             Minecraft mc = Minecraft.getInstance();
             if (mc == null) {
@@ -207,7 +200,6 @@ public class RandomKey {
                 System.out.println("[KeyShuffler] mc.options is null - aborting randomize");
                 return;
             }
-
             Options options = mc.options;
             KeyMapping[] mappings = options.keyMappings;
             if (mappings == null) {
@@ -218,9 +210,7 @@ public class RandomKey {
                 System.out.println("[KeyShuffler] options.keyMappings is empty");
                 return;
             }
-
             System.out.println("[KeyShuffler] Found " + mappings.length + " key mappings");
-
             for (KeyMapping mapping : mappings) {
                 if (mapping == null) {
                     System.out.println("[KeyShuffler] encountered null mapping - skipping");
@@ -228,26 +218,20 @@ public class RandomKey {
                 }
                 String name = mapping.getName();
                 System.out.println("[KeyShuffler] processing mapping: " + name);
-
                 // 必要なら除外キーをここでチェック
                 if ("key.attack".equals(name) || "key.use".equals(name)) {
                     System.out.println("[KeyShuffler] skipping excluded mapping: " + name);
                     continue;
                 }
-
                 // GUI が開いているときは変更を避ける
                 if (mc.screen != null) {
                     System.out.println("[KeyShuffler] GUI open - skipping mapping " + name + " this tick");
                     continue;
                 }
-
                 InputConstants.Key newKey = randomSingle();
                 System.out.println("[KeyShuffler] chosen new key for " + name + ": " + newKey.getValue());
-
-                // 公開 API を使って安全に設定（MAP の更新を含む）
                 boolean success = false;
                 try {
-                    // まず公開 API を試す（setKey が存在する場合）
                     try {
                         mapping.setKey(newKey);
                         KeyMapping.resetMapping();
@@ -255,7 +239,6 @@ public class RandomKey {
                         System.out.println("[KeyShuffler] setKey succeeded for " + name + " -> " + newKey.getValue());
                     } catch (Throwable t1) {
                         System.out.println("[KeyShuffler] setKey failed for " + name + ": " + t1);
-                        // フォールバック: リフレクションで setKeyModifierAndCode を試す
                         try {
                             Method m = mapping.getClass().getMethod("setKeyModifierAndCode", InputConstants.Key.class, InputConstants.Key.class);
                             m.setAccessible(true);
@@ -274,13 +257,10 @@ public class RandomKey {
                     System.out.println("[KeyShuffler] Unexpected error while setting key for " + name + ": " + t);
                     t.printStackTrace(System.out);
                 }
-
                 if (!success) {
                     System.out.println("[KeyShuffler] Failed to change key mapping for " + name + " - leaving as-is");
                 }
             }
-
-            // オプション保存（必要なら有効にする）
             try {
                 options.save();
                 System.out.println("[KeyShuffler] options.save() completed successfully");
@@ -291,7 +271,6 @@ public class RandomKey {
 
             System.out.println("[KeyShuffler] performRandomizeNow end");
         }
-
         private static InputConstants.Key randomSingle() {
             InputConstants.Key k = POSSIBLE_SINGLE.get(RAND.nextInt(POSSIBLE_SINGLE.size()));
             System.out.println("[KeyShuffler] randomSingle -> " + k.getValue());
