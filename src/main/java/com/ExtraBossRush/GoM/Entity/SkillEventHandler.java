@@ -149,9 +149,9 @@ public class SkillEventHandler {
                     }
                     living.hurt(level.damageSources().magic(), 20.0f);
                     living.addEffect(new MobEffectInstance(
-                            MobEffects.MOVEMENT_SLOWDOWN, 100, 4));
+                            MobEffects.MOVEMENT_SLOWDOWN, 100, 4, false, false, false));
                     living.addEffect(new MobEffectInstance(
-                            MobEffects.BLINDNESS, 100, 0));
+                            MobEffects.BLINDNESS, 100, 0, false, false, false));
                 }
             }
         }
@@ -267,7 +267,6 @@ public class SkillEventHandler {
             }
         }
     }
-    // ====================== GoMSkillEvent処理 ======================
     @SubscribeEvent
     public static void onGoMSkill(GoMSkillEvent event) {
         GoMEntity boss      = event.getBoss();
@@ -403,7 +402,6 @@ public class SkillEventHandler {
                 new SkillEffectPacket(pos, skillId)
         );
     }
-    // ====================== PE / AK ======================
     private static void PE(GoMEntity boss, ServerPlayer target, Level level) {
         Random rand = new Random();
         double offsetX = (rand.nextDouble() - 0.5) * 25.0;

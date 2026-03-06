@@ -1,7 +1,6 @@
 package com.ExtraBossRush.GoM.Item;
 
 import com.ExtraBossRush.ExtraBossRush;
-import com.ExtraBossRush.GoM.Item.GoMItem;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.CreativeModeTab;
@@ -17,10 +16,10 @@ public class GoMTabs {
     public static final RegistryObject<CreativeModeTab> GOM_TAB = TABS.register("gom_tab", () ->
             CreativeModeTab.builder()
                     .title(Component.translatable("itemGroup.extrabossrush.gom"))
-                    .icon(() -> new ItemStack(GoMItem.EXPLOSION_STAFF.get()))
+                    .icon(() -> new ItemStack(GoMItems.EXPLOSION_STAFF.get()))
                     .displayItems((params, output) -> {
-                        output.accept(GoMItem.MAGIC_GUARDIAN_SPAWN_EGG.get());
-                        output.accept(GoMItem.EXPLOSION_STAFF.get());
+                        output.accept(GoMItems.MAGIC_GUARDIAN_EGG.get());
+                        output.accept(GoMItems.EXPLOSION_STAFF.get());
                     })
                     .build());
 
