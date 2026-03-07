@@ -1,5 +1,6 @@
 package com.ExtraBossRush.GoM.Entity;
 import com.ExtraBossRush.ExtraBossRush;
+import com.ExtraBossRush.GoM.ARV2Config;
 import com.ExtraBossRush.GoM.Item.GoMItems;
 import com.ExtraBossRush.GoM.Skill.GoMSkillEvent;
 import com.ExtraBossRush.GoM.Support.PSU;
@@ -42,6 +43,7 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
@@ -57,75 +59,82 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
+import java.lang.management.ManagementFactory;
+import java.math.BigInteger;
 import io.netty.channel.ChannelPipeline;
 @Mod.EventBusSubscriber(modid=ExtraBossRush.MOD_ID,bus=Mod.EventBusSubscriber.Bus.FORGE)
 public class GoMEntity extends Monster {
-    private static final EntityDataAccessor<String>  i11li11i=SynchedEntityData.defineId(GoMEntity.class,EntityDataSerializers.STRING);
-    private static final EntityDataAccessor<Float>   i11li1i1=SynchedEntityData.defineId(GoMEntity.class,EntityDataSerializers.FLOAT);
-    private static final EntityDataAccessor<Boolean> i11li1ii=SynchedEntityData.defineId(GoMEntity.class,EntityDataSerializers.BOOLEAN);
-    private static final List<i11ilill> i11i11ii=new CopyOnWriteArrayList<>();
-    private static final SecureRandom i11l1l1l=new SecureRandom();
-    private static final ConcurrentHashMap<UUID,byte[]>     i11iill1=new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,byte[]>     i11il111=new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,byte[]>     i11iilli=new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,KeyPair>    i11l1lii  =new ConcurrentHashMap<>();
-    static  final ConcurrentHashMap<UUID,AtomicLong>        i11l1lil  =new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,Integer>    i11l1li1  =new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,Long>       i11iliii  =new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,Long>       i11ilil1  =new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,byte[]>     i11ilili  =new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,AtomicLong> i11iilll=new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,Byte>       i11i1i11=new ConcurrentHashMap<>();
-    private static final ConcurrentHashMap<UUID,long[]>     i11l1ill  =new ConcurrentHashMap<>();
-    private static final byte[]i11il1ll;
-    static{byte[]i11ii111=new byte[32];new SecureRandom().nextBytes(i11ii111);i11il1ll=i11ii111;}
-    private static volatile boolean i111l1il=false;
-    private static final int    i1111lil=10;
-    private static final long   i1111ll1=6000L,i1111li1=3L;
-    private static final int    i111li1i=120;
-    private static final String i11iii11="1";
-    static final SimpleChannel i11l1ll1;
+    private static final EntityDataAccessor<String>  SdaId=SynchedEntityData.defineId(GoMEntity.class,EntityDataSerializers.STRING);
+    private static final EntityDataAccessor<Float>   SdaHR=SynchedEntityData.defineId(GoMEntity.class,EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Boolean> SdaHt=SynchedEntityData.defineId(GoMEntity.class,EntityDataSerializers.BOOLEAN);
+    private static final List<ML> MlList=new CopyOnWriteArrayList<>();
+    private static final SecureRandom SRng=new SecureRandom();
+    private static final ConcurrentHashMap<UUID,byte[]>     SkA=new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,byte[]>     SkB=new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,byte[]>     SkC=new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,KeyPair>    KpMap  =new ConcurrentHashMap<>();
+    static  final ConcurrentHashMap<UUID,AtomicLong>        SeqMap  =new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,Integer>    FcMap  =new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,Long>       LrtMap  =new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,Long>       LhtMap  =new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,Vec3[]>     PlrHist =new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,float[]>    PlrYaw  =new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,byte[]>     NcMap  =new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,AtomicLong> CtrMap=new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,Byte>       StMap=new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID,long[]>     RlMap  =new ConcurrentHashMap<>();
+    private static final byte[]PiPep;
+    static{byte[]piPepInit=new byte[32];SRng.nextBytes(piPepInit);PiPep=piPepInit;}
+    private static boolean enableSphereBreak = true;
+    private static final int    MaxFail=10;
+    private static final long   RekeyT=6000L,MinHitT=3L;
+    private static final int    RateLim=120;
+    private static final String ProtoV="1";
+    static final SimpleChannel Chan;
     static{
-        i11l1ll1=NetworkRegistry.newSimpleChannel(new ResourceLocation(ExtraBossRush.MOD_ID,new String(new byte[]{0x67,0x6F,0x6D})),()->i11iii11,i11iii11::equals,i11iii11::equals);
-        i11l1ll1.registerMessage(0,i11l1ili.class,i11l1ili::i11li1ll,i11l1ili::i11ill11,i11l1ili::i11lii1l);
-        i11l1ll1.registerMessage(1,i11l1l11.class,i11l1l11::i11li1ll,i11l1l11::i11ill11,i11l1l11::i11lii1l);
-        i11l1ll1.registerMessage(2,i11l11l1.class,i11l11l1::i11li1ll,i11l11l1::i11ill11,i11l11l1::i11lii1l);
-        i11l1ll1.registerMessage(3,i11l11li.class,i11l11li::i11li1ll,i11l11li::i11ill11,i11l11li::i11lii1l);
-        i11l1ll1.registerMessage(4,i11l11il.class,i11l11il::i11li1ll,i11l11il::i11ill11,i11l11il::i11lii1l);
+        Chan=NetworkRegistry.newSimpleChannel(new ResourceLocation(ExtraBossRush.MOD_ID,new String(new byte[]{0x67,0x6F,0x6D})),()->ProtoV,ProtoV::equals,ProtoV::equals);
+        Chan.registerMessage(0,PKPkt.class,PKPkt::Enc,PKPkt::Dec,PKPkt::Hdlr);
+        Chan.registerMessage(1,CKPkt.class,CKPkt::Enc,CKPkt::Dec,CKPkt::Hdlr);
+        Chan.registerMessage(2,HRPkt.class,HRPkt::Enc,HRPkt::Dec,HRPkt::Hdlr);
+        Chan.registerMessage(3,ECPkt.class,ECPkt::Enc,ECPkt::Dec,ECPkt::Hdlr);
+        Chan.registerMessage(4,SPkt.class,SPkt::Enc,SPkt::Dec,SPkt::Hdlr);
     }
-    private static boolean i11i1i1l(UUID u){
-        long[]r=i11l1ill.computeIfAbsent(u,k->new long[]{0L,0L});
+    private static boolean ChkRL(UUID u){
+        long[]r=RlMap.computeIfAbsent(u,k->new long[]{0L,0L});
         long t=System.currentTimeMillis();
         if(t-r[0]>1000L){r[0]=t;r[1]=0L;}
-        return++r[1]<=i111li1i;
+        return++r[1]<=RateLim;
     }
-    private static void i11i11ll(UUID u){
-        byte[]a=i11iill1.remove(u),b=i11il111.remove(u),c=i11iilli.remove(u);
+    private static void PurgS(UUID u){
+        byte[]a=SkA.remove(u),b=SkB.remove(u),c=SkC.remove(u);
         if(a!=null)Arrays.fill(a,(byte)0);if(b!=null)Arrays.fill(b,(byte)0);if(c!=null)Arrays.fill(c,(byte)0);
-        i11l1lii.remove(u);i11l1lil.remove(u);i11l1li1.remove(u);i11iliii.remove(u);i11ilil1.remove(u);i11ilili.remove(u);i11iilll.remove(u);i11i1i11.remove(u);i11l1ill.remove(u);
+        KpMap.remove(u);SeqMap.remove(u);FcMap.remove(u);LrtMap.remove(u);LhtMap.remove(u);NcMap.remove(u);CtrMap.remove(u);StMap.remove(u);PlrHist.remove(u);PlrYaw.remove(u);RlMap.remove(u);
     }
-    private static final byte[]i111liii=new String(new byte[]{(byte)0xE6,(byte)0x94,(byte)0xBE,(byte)0xE9,(byte)0x80,(byte)0xA3},StandardCharsets.UTF_8).getBytes(StandardCharsets.UTF_8);
-    private static void i11i1i1i(ServerPlayer sp,byte[]sk){
-        if(sk!=null)Arrays.fill(sk,(byte)0);i11i11ll(sp.getUUID());
-        sp.connection.disconnect(Component.literal(new String(i111liii,StandardCharsets.UTF_8)));
+    private static final byte[]KickMsg=new String(new byte[]{(byte)0xE6,(byte)0x94,(byte)0xBE,(byte)0xE9,(byte)0x80,(byte)0xA3},StandardCharsets.UTF_8).getBytes(StandardCharsets.UTF_8);
+    private static void KickP(ServerPlayer sp,byte[]sk){
+        if(sk!=null)Arrays.fill(sk,(byte)0);PurgS(sp.getUUID());
+        sp.connection.disconnect(Component.literal(new String(KickMsg,StandardCharsets.UTF_8)));
     }
-    private static byte[]i11iliil(UUID u){
-        byte[]a=i11iill1.get(u),b=i11il111.get(u),c=i11iilli.get(u);if(a==null||b==null||c==null)return null;
-        byte[]r=new byte[32];for(int i=0;i<32;i++)r[i]=(byte)(a[i]^b[i]^c[i]);return r;
+    private static byte[]RcvK(UUID u){
+        byte[]a=SkA.get(u),b=SkB.get(u),c=SkC.get(u);if(a==null||b==null||c==null)return null;
+        byte[]r=new byte[32];int nz=0;for(int i=0;i<32;i++){r[i]=(byte)(a[i]^b[i]^c[i]);nz|=r[i]&0xFF;}
+        if(nz==0){Arrays.fill(r,(byte)0);return null;}
+        return r;
     }
     public GoMEntity(EntityType<? extends GoMEntity>t,Level l){super(t,l);this.setNoGravity(true);this.noPhysics=true;}
     @Override
     protected void defineSynchedData(){
         super.defineSynchedData();
-        this.entityData.define(i11li11i,"");this.entityData.define(i11li1i1,1.0F);this.entityData.define(i11li1ii,false);
+        this.entityData.define(SdaId,"");this.entityData.define(SdaHR,1.0F);this.entityData.define(SdaHt,false);
     }
     @Override public void onSyncedDataUpdated(EntityDataAccessor<?>k){super.onSyncedDataUpdated(k);}
-    String  i11il11i()        {return this.entityData.get(i11li11i);}
-    void    i11il11i(String v){this.entityData.set(i11li11i,v);}
-    float   i11ili1i()        {return this.entityData.get(i11li1i1);}
-    boolean i11ili1l()        {return this.entityData.get(i11li1ii);}
-    float   i11ilii1()        {return 1.0F-i11ili1i();}
+    String  EntId()        {return this.entityData.get(SdaId);}
+    void    EntId(String v){this.entityData.set(SdaId,v);}
+    float   GetHPR()        {return this.entityData.get(SdaHR);}
+    boolean IsHurt()        {return this.entityData.get(SdaHt);}
+    float   GetDR()        {return 1.0F-GetHPR();}
     public static AttributeSupplier.Builder createAttributes(){
         return Mob.createMobAttributes().add(Attributes.MAX_HEALTH,1000.0D).add(Attributes.ATTACK_DAMAGE,15.0D).add(Attributes.FOLLOW_RANGE,1024.0D);
     }
@@ -135,168 +144,169 @@ public class GoMEntity extends Monster {
     @Override public void tick(){}
     @Override public boolean hurt(@NotNull DamageSource s,float a){return false;}
     @Override public boolean canBeAffected(net.minecraft.world.effect.@NotNull MobEffectInstance e){return false;}
-    void i11il1i1(){super.discard();}
-    static String i11l1il1(){
+    void DiscE(){super.discard();}
+    static String GenId(){
         for(;;){
-            StringBuilder b=new StringBuilder();for(int i=0;i<10;i++)b.append(i11l1l1l.nextInt(10));
-            String c=b.toString();if(i11i11ii.stream().noneMatch(m->m.i111l1ll.equals(c)))return c;
+            StringBuilder b=new StringBuilder();for(int i=0;i<10;i++)b.append(SRng.nextInt(10));
+            String c=b.toString();if(MlList.stream().noneMatch(m->m.MlId.equals(c)))return c;
         }
     }
-    static final class i11l1iii{
-        static final byte[]i11illl1,i11ill1i,i11illi1,i11ill1l,i11illil,i11illli,i11illll,i11illii;
-        private static byte[]i1111lii(String cn){
+    static final class CU{
+        static final byte[]HBas_CU,HBas_ML,HBas_GE,HBas_HR,HBas_EC,HBas_SP,HBas_PK,HBas_CK;
+        private static byte[]Hash(String cn){
             try{
-                java.io.InputStream is=i11l1iii.class.getClassLoader().getResourceAsStream(cn);
+                java.io.InputStream is=CU.class.getClassLoader().getResourceAsStream(cn);
                 if(is==null)return new byte[32];
                 byte[]r=MessageDigest.getInstance(new String(new byte[]{0x53,0x48,0x41,0x2D,0x32,0x35,0x36})).digest(is.readAllBytes());
                 is.close();return r;
             }catch(Exception e){return new byte[32];}
         }
         static{
-            i11illl1=i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l1iii.class");
-            i11ill1i=i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11ilill.class");
-            i11illi1=i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity.class");
-            i11ill1l=i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11l1.class");
-            i11illil=i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11li.class");
-            i11illli=i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11il.class");
-            i11illll=i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l1ili.class");
-            i11illii=i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l1l11.class");
+            HBas_CU=Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$CU.class");
+            HBas_ML=Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$ML.class");
+            HBas_GE=Hash("com/ExtraBossRush/GoM/Entity/GoMEntity.class");
+            HBas_HR=Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$HRPkt.class");
+            HBas_EC=Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$ECPkt.class");
+            HBas_SP=Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$SPkt.class");
+            HBas_PK=Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$PKPkt.class");
+            HBas_CK=Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$CKPkt.class");
         }
-        static boolean i111i1il(){
+        static boolean VerAll(){
             try{
                 int d=0;
-                byte[][]cur={i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l1iii.class"),i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11ilill.class"),
-                        i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity.class"),i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11l1.class"),
-                        i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11li.class"),i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11il.class"),i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l1ili.class"),i1111lii("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l1l11.class")};
-                byte[][]base={i11illl1,i11ill1i,i11illi1,i11ill1l,i11illil,i11illli,i11illll,i11illii};
+                byte[][]cur={Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$CU.class"),Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$ML.class"),
+                        Hash("com/ExtraBossRush/GoM/Entity/GoMEntity.class"),Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$HRPkt.class"),
+                        Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$ECPkt.class"),Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$SPkt.class"),Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$PKPkt.class"),Hash("com/ExtraBossRush/GoM/Entity/GoMEntity$CKPkt.class")};
+                byte[][]base={HBas_CU,HBas_ML,HBas_GE,HBas_HR,HBas_EC,HBas_SP,HBas_PK,HBas_CK};
                 for(int j=0;j<cur.length;j++)for(int i=0;i<32;i++)d|=(cur[j][i]^base[j][i]);
                 return d!=0;
             }catch(Exception e){return true;}
         }
-        private static final String i11i1iil=new String(new byte[]{0x45,0x43});
-        private static final String i11lii11=new String(new byte[]{0x73,0x65,0x63,0x70,0x32,0x35,0x36,0x72,0x31});
-        private static final String i111111i=new String(new byte[]{0x45,0x43,0x44,0x48});
-        private static final String i11li1il=new String(new byte[]{0x53,0x48,0x41,0x2D,0x32,0x35,0x36});
-        private static final String i11i1ii1=new String(new byte[]{0x41,0x45,0x53,0x2F,0x47,0x43,0x4D,0x2F,0x4E,0x6F,0x50,0x61,0x64,0x64,0x69,0x6E,0x67});
-        private static final String i1111ili=new String(new byte[]{0x41,0x45,0x53});
-        private static final String i111llll=new String(new byte[]{0x43,0x68,0x61,0x43,0x68,0x61,0x32,0x30,0x2D,0x50,0x6F,0x6C,0x79,0x31,0x33,0x30,0x35});
-        private static final String i11ii1ll=new String(new byte[]{0x43,0x68,0x61,0x43,0x68,0x61,0x32,0x30});
-        private static final String i111i11l=new String(new byte[]{0x41,0x45,0x53,0x2F,0x45,0x43,0x42,0x2F,0x4E,0x6F,0x50,0x61,0x64,0x64,0x69,0x6E,0x67});
-        private static int i1111lli(int v,int s){return(v<<(s&31))|(v>>>(32-(s&31)));}
-        private static long i111i11i(long v){return Long.reverse(v)^(v>>>7)^(v<<13);}
-        static byte[]i11il1ii(byte[]sk,byte info){
+        private static final String ALG_EC=new String(new byte[]{0x45,0x43});
+        private static final String ALG_CURVE=new String(new byte[]{0x73,0x65,0x63,0x70,0x32,0x35,0x36,0x72,0x31});
+        private static final String ALG_ECDH=new String(new byte[]{0x45,0x43,0x44,0x48});
+        private static final String ALG_SHA=new String(new byte[]{0x53,0x48,0x41,0x2D,0x32,0x35,0x36});
+        private static final String ALG_AESG=new String(new byte[]{0x41,0x45,0x53,0x2F,0x47,0x43,0x4D,0x2F,0x4E,0x6F,0x50,0x61,0x64,0x64,0x69,0x6E,0x67});
+        private static final String ALG_AES=new String(new byte[]{0x41,0x45,0x53});
+        private static final String ALG_CC20=new String(new byte[]{0x43,0x68,0x61,0x43,0x68,0x61,0x32,0x30,0x2D,0x50,0x6F,0x6C,0x79,0x31,0x33,0x30,0x35});
+        private static final String ALG_CC20S=new String(new byte[]{0x43,0x68,0x61,0x43,0x68,0x61,0x32,0x30});
+        private static final String ALG_AESE=new String(new byte[]{0x41,0x45,0x53,0x2F,0x45,0x43,0x42,0x2F,0x4E,0x6F,0x50,0x61,0x64,0x64,0x69,0x6E,0x67});
+        private static int RotL(int v,int s){return(v<<(s&31))|(v>>>(32-(s&31)));}
+        private static long MixL(long v){return Long.reverse(v)^(v>>>7)^(v<<13);}
+        static byte[]KDF(byte[]sk,byte info){
             try{
-                MessageDigest md=MessageDigest.getInstance(i11li1il);
+                MessageDigest md=MessageDigest.getInstance(ALG_SHA);
                 byte[]blk=new byte[64];System.arraycopy(sk,0,blk,0,Math.min(sk.length,64));
                 byte[]ip=new byte[64],op=new byte[64];
                 for(int i=0;i<64;i++){ip[i]=(byte)(blk[i]^0x36);op[i]=(byte)(blk[i]^0x5C);}
-                int i11lil1i=i1111lli(info&0xFF,3);
-                ip[i11lil1i&63]^=(byte)(info^0xA3);op[(i11lil1i^31)&63]^=(byte)(info^0x5B);
+                int rotV=RotL(info&0xFF,3);
+                ip[rotV&63]^=(byte)(info^0xA3);op[(rotV^31)&63]^=(byte)(info^0x5B);
                 md.update(ip);byte[]r1=md.digest(sk);md.reset();md.update(op);return md.digest(r1);
             }catch(Exception e){throw new RuntimeException(e);}
         }
-        static KeyPair i11l111i(){
+        static KeyPair GenKP(){
             try{
-                KeyPairGenerator g=KeyPairGenerator.getInstance(i11i1iil);
-                g.initialize(new ECGenParameterSpec(i11lii11),new SecureRandom());return g.generateKeyPair();
+                KeyPairGenerator g=KeyPairGenerator.getInstance(ALG_EC);
+                g.initialize(new ECGenParameterSpec(ALG_CURVE),new SecureRandom());return g.generateKeyPair();
             }catch(Exception e){throw new RuntimeException(e);}
         }
-        static byte[]i11l11ll(PrivateKey prv,byte[]pub){
+        static byte[]ECDH(PrivateKey prv,byte[]pub){
             try{
-                PublicKey pk=KeyFactory.getInstance(i11i1iil).generatePublic(new X509EncodedKeySpec(pub));
-                KeyAgreement ka=KeyAgreement.getInstance(i111111i);ka.init(prv);ka.doPhase(pk,true);
-                return MessageDigest.getInstance(i11li1il).digest(ka.generateSecret());
+                PublicKey pk=KeyFactory.getInstance(ALG_EC).generatePublic(new X509EncodedKeySpec(pub));
+                KeyAgreement ka=KeyAgreement.getInstance(ALG_ECDH);ka.init(prv);ka.doPhase(pk,true);
+                return MessageDigest.getInstance(ALG_SHA).digest(ka.generateSecret());
             }catch(Exception e){throw new RuntimeException(e);}
         }
-        static byte[]i11l1i1i(byte[]key,byte[]plain,byte[]aad){
+        static byte[]EncAG(byte[]key,byte[]plain,byte[]aad){
             try{
                 byte[]iv=new byte[12];new SecureRandom().nextBytes(iv);
-                Cipher c=Cipher.getInstance(i11i1ii1);
-                c.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(key,i1111ili),new GCMParameterSpec(128,iv));
+                Cipher c=Cipher.getInstance(ALG_AESG);
+                c.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(key,ALG_AES),new GCMParameterSpec(128,iv));
                 if(aad!=null)c.updateAAD(aad);byte[]ct=c.doFinal(plain);
                 return ByteBuffer.allocate(12+ct.length).put(iv).put(ct).array();
             }catch(Exception e){throw new RuntimeException(e);}
         }
-        private static volatile int i111lil1=0;
-        static byte[]i11il1li(byte[]key,byte[]plain,byte[]aad,AtomicLong ctr){
+        private static volatile int Cc20Flip=0;
+        static byte[]EncDbl(byte[]key,byte[]plain,byte[]aad,AtomicLong Ctr){
             try{
-                int i11iii1l=(int)(System.nanoTime()&0x7FFFFFFE);
-                if((i111lil1&1)!=0){Arrays.fill(key,(byte)0xFF);return new byte[0];}
-                i111lil1=i11iii1l;
-                if(i1111lli(i11iii1l,7)<0&&Integer.bitCount(i11iii1l)==32){throw new RuntimeException();}
-                byte[]k1=i11il1ii(key,(byte)0x01),k2=i11il1ii(key,(byte)0x02);
-                long cnt=ctr.getAndIncrement();
+                int nanosV=(int)(System.nanoTime()&0x7FFFFFFE);
+                if((Cc20Flip&1)!=0){Arrays.fill(key,(byte)0xFF);return new byte[0];}
+                Cc20Flip=nanosV;
+                if(RotL(nanosV,7)<0&&Integer.bitCount(nanosV)==32){throw new RuntimeException();}
+                byte[]k1=KDF(key,(byte)0x01),k2=KDF(key,(byte)0x02);
+                long cnt=Ctr.getAndIncrement();
+                if(cnt>=(1L<<62)){Ctr.set(0L);throw new RuntimeException("CtrWrap");}
                 byte[]iv1=new byte[12];System.arraycopy(k1,0,iv1,0,4);ByteBuffer.wrap(iv1,4,8).putLong(cnt);
-                Cipher c1=Cipher.getInstance(i11i1ii1);
-                c1.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(k1,i1111ili),new GCMParameterSpec(128,iv1));
+                Cipher c1=Cipher.getInstance(ALG_AESG);
+                c1.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(k1,ALG_AES),new GCMParameterSpec(128,iv1));
                 if(aad!=null)c1.updateAAD(aad);byte[]inner=c1.doFinal(plain);
                 byte[]wrapped=ByteBuffer.allocate(12+inner.length).put(iv1).put(inner).array();
                 byte[]iv2=new byte[12];new SecureRandom().nextBytes(iv2);
-                Cipher c2=Cipher.getInstance(i111llll);
-                c2.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(k2,i11ii1ll),new IvParameterSpec(iv2));
+                Cipher c2=Cipher.getInstance(ALG_CC20);
+                c2.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(k2,ALG_CC20S),new IvParameterSpec(iv2));
                 if(aad!=null)c2.updateAAD(aad);byte[]outer=c2.doFinal(wrapped);
                 Arrays.fill(k1,(byte)0);Arrays.fill(k2,(byte)0);
                 return ByteBuffer.allocate(12+outer.length).put(iv2).put(outer).array();
             }catch(Exception e){throw new RuntimeException(e);}
         }
-        static byte[]i11l1i1l(byte[]key,byte[]data,byte[]aad){
+        static byte[]DecDbl(byte[]key,byte[]Data,byte[]aad){
             try{
-                long i11i1lli=System.nanoTime()^data.length;
-                if(Long.bitCount(i11i1lli)==0&&i111i11i(i11i1lli)!=0){return null;}
-                byte[]k1=i11il1ii(key,(byte)0x01),k2=i11il1ii(key,(byte)0x02);
-                ByteBuffer ob=ByteBuffer.wrap(data);
+                long nanosXor=System.nanoTime()^Data.length;
+                if(Long.bitCount(nanosXor)==0&&MixL(nanosXor)!=0){return null;}
+                byte[]k1=KDF(key,(byte)0x01),k2=KDF(key,(byte)0x02);
+                ByteBuffer ob=ByteBuffer.wrap(Data);
                 byte[]iv2=new byte[12];ob.get(iv2);byte[]oCt=new byte[ob.remaining()];ob.get(oCt);
-                Cipher c2=Cipher.getInstance(i111llll);
-                c2.init(Cipher.DECRYPT_MODE,new SecretKeySpec(k2,i11ii1ll),new IvParameterSpec(iv2));
+                Cipher c2=Cipher.getInstance(ALG_CC20);
+                c2.init(Cipher.DECRYPT_MODE,new SecretKeySpec(k2,ALG_CC20S),new IvParameterSpec(iv2));
                 if(aad!=null)c2.updateAAD(aad);byte[]wrapped=c2.doFinal(oCt);
                 ByteBuffer ib=ByteBuffer.wrap(wrapped);
                 byte[]iv1=new byte[12];ib.get(iv1);byte[]iCt=new byte[ib.remaining()];ib.get(iCt);
-                Cipher c1=Cipher.getInstance(i11i1ii1);
-                c1.init(Cipher.DECRYPT_MODE,new SecretKeySpec(k1,i1111ili),new GCMParameterSpec(128,iv1));
+                Cipher c1=Cipher.getInstance(ALG_AESG);
+                c1.init(Cipher.DECRYPT_MODE,new SecretKeySpec(k1,ALG_AES),new GCMParameterSpec(128,iv1));
                 if(aad!=null)c1.updateAAD(aad);byte[]r=c1.doFinal(iCt);
                 Arrays.fill(k1,(byte)0);Arrays.fill(k2,(byte)0);return r;
             }catch(Exception e){return null;}
         }
-        static byte[]i11il1il(byte[]key,byte[]data,byte[]aad){
+        static byte[]DecAG(byte[]key,byte[]Data,byte[]aad){
             try{
-                ByteBuffer bb=ByteBuffer.wrap(data);byte[]iv=new byte[12];bb.get(iv);
+                ByteBuffer bb=ByteBuffer.wrap(Data);byte[]iv=new byte[12];bb.get(iv);
                 byte[]ct=new byte[bb.remaining()];bb.get(ct);
-                Cipher c=Cipher.getInstance(i11i1ii1);
-                c.init(Cipher.DECRYPT_MODE,new SecretKeySpec(key,i1111ili),new GCMParameterSpec(128,iv));
+                Cipher c=Cipher.getInstance(ALG_AESG);
+                c.init(Cipher.DECRYPT_MODE,new SecretKeySpec(key,ALG_AES),new GCMParameterSpec(128,iv));
                 if(aad!=null)c.updateAAD(aad);return c.doFinal(ct);
             }catch(Exception e){return null;}
         }
-        static byte i11l11i1(double v){
-            boolean i11iilil=(v==Math.floor(v))&&!Double.isInfinite(v)&&v>=Integer.MIN_VALUE&&v<=Integer.MAX_VALUE;
-            if(i11iilil)return 0x01;if(Math.abs(v)<=32767.0)return 0x00;if(Math.abs(v)<=922337203685.0)return 0x02;return 0x03;
+        static byte HpTyp(double v){
+            boolean isFrac=(v==Math.floor(v))&&!Double.isInfinite(v)&&v>=Integer.MIN_VALUE&&v<=Integer.MAX_VALUE;
+            if(isFrac)return 0x01;if(Math.abs(v)<=32767.0)return 0x00;if(Math.abs(v)<=922337203685.0)return 0x02;return 0x03;
         }
-        static int i11il11l(byte t){return(t==0x00||t==0x01)?4:8;}
-        static void i11l111l(ByteBuffer bb,double v,byte t){
+        static int HpSz(byte t){return(t==0x00||t==0x01)?4:8;}
+        static void WrCrd(ByteBuffer bb,double v,byte t){
             switch(t){case 0x00->bb.putFloat((float)v);case 0x01->bb.putInt((int)v);case 0x02->bb.putLong(Math.round(v*10000.0));case 0x03->bb.putDouble(v);}
         }
-        static double i11l1111(ByteBuffer bb,int t){
+        static double RdCrd(ByteBuffer bb,int t){
             return switch(t){case 0x00->bb.getFloat();case 0x01->bb.getInt();case 0x02->bb.getLong()/10000.0;case 0x03->bb.getDouble();default->throw new IllegalArgumentException();};
         }
-        static byte[]i11l1ii1(byte[]key,float v){
+        static byte[]EncHPF(byte[]key,float v){
             try{
                 byte[]blk=new byte[16];int bits=Float.floatToRawIntBits(v);
                 blk[0]=(byte)(bits>>24);blk[1]=(byte)(bits>>16);blk[2]=(byte)(bits>>8);blk[3]=(byte)bits;
                 new SecureRandom().nextBytes(Arrays.copyOfRange(blk,4,16));
                 blk[4]=(byte)(bits^blk[0]^0xA5);blk[5]=(byte)(bits^(blk[1]<<1)^0x3C);
                 blk[12]=(byte)~blk[0];blk[13]=(byte)~blk[1];blk[14]=(byte)~blk[2];blk[15]=(byte)~blk[3];
-                Cipher c=Cipher.getInstance(i111i11l);c.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(key,i1111ili));return c.doFinal(blk);
+                Cipher c=Cipher.getInstance(ALG_AESE);c.init(Cipher.ENCRYPT_MODE,new SecretKeySpec(key,ALG_AES));return c.doFinal(blk);
             }catch(Exception e){throw new RuntimeException(e);}
         }
-        static float i11l1iil(byte[]key,byte[]ci){
+        static float DecHPF(byte[]key,byte[]ci){
             if(ci==null||ci.length<16)return 0f;
             try{
-                Cipher c=Cipher.getInstance(i111i11l);c.init(Cipher.DECRYPT_MODE,new SecretKeySpec(key,i1111ili));
+                Cipher c=Cipher.getInstance(ALG_AESE);c.init(Cipher.DECRYPT_MODE,new SecretKeySpec(key,ALG_AES));
                 byte[]blk=c.doFinal(ci);
                 int bits=((blk[0]&0xFF)<<24)|((blk[1]&0xFF)<<16)|((blk[2]&0xFF)<<8)|(blk[3]&0xFF);
                 return Float.intBitsToFloat(bits);
             }catch(Exception e){return 0f;}
         }
-        private static final Set<String>i111i111=new HashSet<>(Arrays.asList(
+        private static final Set<String>PipeOk=new HashSet<>(Arrays.asList(
                 new String(new byte[]{0x74,0x69,0x6D,0x65,0x6F,0x75,0x74}),
                 new String(new byte[]{0x6C,0x65,0x67,0x61,0x63,0x79,0x5F,0x71,0x75,0x65,0x72,0x79}),
                 new String(new byte[]{0x66,0x72,0x61,0x6D,0x65,0x72}),
@@ -308,259 +318,273 @@ public class GoMEntity extends Monster {
                 new String(new byte[]{0x66,0x6D,0x6C,0x5F,0x6E,0x65,0x74,0x77,0x6F,0x72,0x6B,0x5F,0x66,0x69,0x6C,0x74,0x65,0x72}),
                 new String(new byte[]{0x66,0x6D,0x6C,0x5F,0x6E,0x65,0x74,0x77,0x6F,0x72,0x6B,0x5F,0x63,0x68,0x65,0x63,0x6B})
         ));
-        static boolean i11111ll(ServerPlayer sp){try{io.netty.channel.ChannelPipeline pipe=sp.connection.connection.channel().pipeline();for(String n:pipe.names()){String lo=n.toLowerCase(java.util.Locale.ROOT);boolean ok=false;for(String s:i111i111){if(lo.contains(s)){ok=true;break;}}if(!ok){String cls=pipe.get(n).getClass().getName().toLowerCase(java.util.Locale.ROOT);if(!cls.contains(new String(new byte[]{0x6D,0x69,0x6E,0x65,0x63,0x72,0x61,0x66,0x74}))&&!cls.contains(new String(new byte[]{0x6D,0x69,0x6E,0x65,0x66,0x6F,0x72,0x67,0x65}))&&!cls.contains(new String(new byte[]{0x6E,0x65,0x74,0x74,0x79}))&&!cls.contains(new String(new byte[]{0x66,0x6F,0x72,0x67,0x65})))System.out.println(new String(new byte[]{0x5B,0x47,0x6F,0x4D,0x5D})+n+new String(new byte[]{0x3A,0x20})+cls);}}}catch(Exception e){}return false;}
+        static boolean ChkPL(ServerPlayer sp){try{io.netty.channel.ChannelPipeline pipe=sp.connection.connection.channel().pipeline();for(String n:pipe.names()){String lo=n.toLowerCase(java.util.Locale.ROOT);boolean ok=false;for(String s:PipeOk){if(lo.contains(s)){ok=true;break;}}if(!ok){String cls=pipe.get(n).getClass().getName().toLowerCase(java.util.Locale.ROOT);if(!cls.contains(new String(new byte[]{0x6D,0x69,0x6E,0x65,0x63,0x72,0x61,0x66,0x74}))&&!cls.contains(new String(new byte[]{0x6D,0x69,0x6E,0x65,0x66,0x6F,0x72,0x67,0x65}))&&!cls.contains(new String(new byte[]{0x6E,0x65,0x74,0x74,0x79}))&&!cls.contains(new String(new byte[]{0x66,0x6F,0x72,0x67,0x65})))System.out.println(new String(new byte[]{0x5B,0x47,0x6F,0x4D,0x5D})+n+new String(new byte[]{0x3A,0x20})+cls);}}}catch(Exception e){}return false;}
     }
-    static final class i11l1ili{
-        final byte[]i11li111;i11l1ili(byte[]k){i11li111=k;}private static final int i11ii11l=256;
-        static void i11li1ll(i11l1ili p,FriendlyByteBuf b){b.writeByteArray(p.i11li111);}
-        static i11l1ili i11ill11(FriendlyByteBuf b){return new i11l1ili(b.readByteArray(i11ii11l));}
-        static void i11lii1l(i11l1ili p,Supplier<NetworkEvent.Context>ctx){ctx.get().enqueueWork(()->i11l1l1i.i111ili1(p.i11li111));ctx.get().setPacketHandled(true);}
+    static final class PKPkt{
+        final byte[]Data;PKPkt(byte[]k){Data=k;}private static final int MaxSz=256;
+        static void Enc(PKPkt p,FriendlyByteBuf b){b.writeByteArray(p.Data);}
+        static PKPkt Dec(FriendlyByteBuf b){return new PKPkt(b.readByteArray(MaxSz));}
+        static void Hdlr(PKPkt p,Supplier<NetworkEvent.Context>ctx){ctx.get().enqueueWork(()->CH.OnPubKey(p.Data));ctx.get().setPacketHandled(true);}
     }
-    static final class i11l1l11{
-        final byte[]i11li111;i11l1l11(byte[]k){i11li111=k;}private static final int i11ii11l=256;
-        static void i11li1ll(i11l1l11 p,FriendlyByteBuf b){b.writeByteArray(p.i11li111);}
-        static i11l1l11 i11ill11(FriendlyByteBuf b){return new i11l1l11(b.readByteArray(i11ii11l));}
-        static void i11lii1l(i11l1l11 p,Supplier<NetworkEvent.Context>ctx){
+    static final class CKPkt{
+        final byte[]Data;CKPkt(byte[]k){Data=k;}private static final int MaxSz=256;
+        static void Enc(CKPkt p,FriendlyByteBuf b){b.writeByteArray(p.Data);}
+        static CKPkt Dec(FriendlyByteBuf b){return new CKPkt(b.readByteArray(MaxSz));}
+        static void Hdlr(CKPkt p,Supplier<NetworkEvent.Context>ctx){
             ctx.get().enqueueWork(()->{
                 ServerPlayer sp=ctx.get().getSender();if(sp==null)return;
                 UUID uid=sp.getUUID();
-                if(!i11i1i1l(uid)){i11i1i1i(sp,null);return;}
-                if(p.i11li111==null||p.i11li111.length>i11ii11l){i11l1li1.merge(uid,1,Integer::sum);return;}
-                Byte st=i11i1i11.get(uid);
-                if(st==null||st!=(byte)0){int f=i11l1li1.merge(uid,1,Integer::sum);if(f>=i1111lil)i11i1i1i(sp,null);return;}
-                if(i11iill1.containsKey(uid))return;
-                KeyPair kp=i11l1lii.remove(uid);if(kp==null)return;
-                byte[]sk;try{sk=i11l1iii.i11l11ll(kp.getPrivate(),p.i11li111);}catch(Exception e){return;}
-                byte[]a=new byte[32],c=new byte[32];i11l1l1l.nextBytes(a);i11l1l1l.nextBytes(c);
+                if(!ChkRL(uid)){KickP(sp,null);return;}
+                if(p.Data==null||p.Data.length>MaxSz){FcMap.merge(uid,1,Integer::sum);return;}
+                Byte st=StMap.get(uid);
+                if(st==null||st!=(byte)0){int f=FcMap.merge(uid,1,Integer::sum);if(f>=MaxFail)KickP(sp,null);return;}
+                if(SkA.containsKey(uid))return;
+                KeyPair kp=KpMap.remove(uid);if(kp==null)return;
+                byte[]sk;try{sk=CU.ECDH(kp.getPrivate(),p.Data);}catch(Exception e){return;}
+                byte[]a=new byte[32],c=new byte[32];SRng.nextBytes(a);SRng.nextBytes(c);
                 byte[]bb2=new byte[32];for(int i=0;i<32;i++)bb2[i]=(byte)(sk[i]^a[i]^c[i]);
                 Arrays.fill(sk,(byte)0);
-                i11iill1.put(uid,a);i11il111.put(uid,bb2);i11iilli.put(uid,c);
-                i11l1lil.put(uid,new AtomicLong(0L));i11l1li1.put(uid,0);i11iliii.put(uid,sp.serverLevel().getGameTime());
-                byte[]n0=new byte[8];i11l1l1l.nextBytes(n0);i11ilili.put(uid,n0);
-                i11iilll.put(uid,new AtomicLong(0L));i11i1i11.put(uid,(byte)1);
+                SkA.put(uid,a);SkB.put(uid,bb2);SkC.put(uid,c);
+                SeqMap.put(uid,new AtomicLong(0L));FcMap.put(uid,0);LrtMap.put(uid,sp.serverLevel().getGameTime());
+                byte[]n0=new byte[8];SRng.nextBytes(n0);NcMap.put(uid,n0);
+                CtrMap.put(uid,new AtomicLong(0L));StMap.put(uid,(byte)1);
             });
             ctx.get().setPacketHandled(true);
         }
     }
-    static final class i11l11l1{
-        final byte[]i11l1lll;i11l11l1(byte[]d){i11l1lll=d;}private static final int i11ii11l=256;
-        static void i11li1ll(i11l11l1 p,FriendlyByteBuf b){b.writeByteArray(p.i11l1lll);}
-        static i11l11l1 i11ill11(FriendlyByteBuf b){return new i11l11l1(b.readByteArray(i11ii11l));}
-        static void i11lii1l(i11l11l1 p,Supplier<NetworkEvent.Context>ctx){
+    static final class HRPkt{
+        final byte[]Data;HRPkt(byte[]d){Data=d;}private static final int MaxSz=256;
+        static void Enc(HRPkt p,FriendlyByteBuf b){b.writeByteArray(p.Data);}
+        static HRPkt Dec(FriendlyByteBuf b){return new HRPkt(b.readByteArray(MaxSz));}
+        static void Hdlr(HRPkt p,Supplier<NetworkEvent.Context>ctx){
             ctx.get().enqueueWork(()->{
                 ServerPlayer sp=ctx.get().getSender();if(sp==null)return;
                 UUID uid=sp.getUUID();
-                if(!i11i1i1l(uid)){i11i1i1i(sp,null);return;}
-                Byte st=i11i1i11.get(uid);if(st==null||st!=(byte)1)return;
+                if(!ChkRL(uid)){KickP(sp,null);return;}
+                Byte st=StMap.get(uid);if(st==null||st!=(byte)1)return;
                 long now=sp.serverLevel().getGameTime();
-                Long lΓ=i11ilil1.get(uid);if(lΓ!=null&&now-lΓ<i1111li1)return;i11ilil1.put(uid,now);
-                byte[]sk=i11iliil(uid);if(sk==null)return;
-                Long lR=i11iliii.get(uid);
-                if(lR!=null&&now-lR>=i1111ll1){
-                    i11iliii.put(uid,now);
-                    byte[]i11iiiii=i11iill1.remove(uid),i11iiil1=i11il111.remove(uid),i11iili1=i11iilli.remove(uid);
-                    if(i11iiiii!=null)Arrays.fill(i11iiiii,(byte)0);if(i11iiil1!=null)Arrays.fill(i11iiil1,(byte)0);if(i11iili1!=null)Arrays.fill(i11iili1,(byte)0);
-                    i11l1lil.remove(uid);i11ilil1.remove(uid);i11ilili.remove(uid);i11iilll.remove(uid);
-                    i11i1i11.put(uid,(byte)0);Arrays.fill(sk,(byte)0);
-                    KeyPair kp=i11l1iii.i11l111i();i11l1lii.put(uid,kp);
-                    i11l1ll1.send(PacketDistributor.PLAYER.with(()->sp),new i11l1ili(kp.getPublic().getEncoded()));return;
+                Long lΓ=LhtMap.get(uid);if(lΓ!=null&&now-lΓ<MinHitT)return;
+                byte[]sk=RcvK(uid);if(sk==null)return;
+                Long lR=LrtMap.get(uid);
+                if(lR!=null&&now-lR>=RekeyT){
+                    LrtMap.put(uid,now);
+                    byte[]skAv=SkA.remove(uid),skBv2=SkB.remove(uid),skCv=SkC.remove(uid);
+                    if(skAv!=null)Arrays.fill(skAv,(byte)0);if(skBv2!=null)Arrays.fill(skBv2,(byte)0);if(skCv!=null)Arrays.fill(skCv,(byte)0);
+                    SeqMap.remove(uid);LhtMap.remove(uid);NcMap.remove(uid);CtrMap.remove(uid);
+                    StMap.put(uid,(byte)0);Arrays.fill(sk,(byte)0);
+                    KeyPair kp=CU.GenKP();KpMap.put(uid,kp);
+                    Chan.send(PacketDistributor.PLAYER.with(()->sp),new PKPkt(kp.getPublic().getEncoded()));return;
                 }
-                if(i11l1iii.i11111ll(sp)){Arrays.fill(sk,(byte)0);i11i1i1i(sp,null);return;}
-                if(i11l1iii.i111i1il()){
-                    Arrays.fill(sk,(byte)0);
-                    Arrays.fill(sk,(byte)0);i11i1i1i(sp,null);return;
+                if(CU.ChkPL(sp)){Arrays.fill(sk,(byte)0);KickP(sp,null);return;}
+                if(CU.VerAll()){
+                    KickP(sp,sk);return;
                 }
                 byte[]aad=uid.toString().getBytes(StandardCharsets.UTF_8);
-                byte[]plain=i11l1iii.i11l1i1l(sk,p.i11l1lll,aad);
+                byte[]plain=CU.DecDbl(sk,p.Data,aad);
                 if(plain==null||plain.length<21){
-                    int f=i11l1li1.merge(uid,1,Integer::sum);if(f>=i1111lil)i11i1i1i(sp,sk);else Arrays.fill(sk,(byte)0);return;
+                    int f=FcMap.merge(uid,1,Integer::sum);if(f>=MaxFail)KickP(sp,sk);else Arrays.fill(sk,(byte)0);return;
                 }
-                i11l1li1.put(uid,0);
+                FcMap.put(uid,0);
                 ByteBuffer bb=ByteBuffer.wrap(plain);
                 byte[]rxN=new byte[8];bb.get(rxN);
-                byte[]expN=i11ilili.get(uid);if(expN==null){Arrays.fill(sk,(byte)0);return;}
-                int i111lill=0;for(int i=0;i<8;i++)i111lill|=(rxN[i]^expN[i]);
-                if(i111lill!=0){int f=i11l1li1.merge(uid,1,Integer::sum);if(f>=i1111lil)i11i1i1i(sp,sk);else Arrays.fill(sk,(byte)0);return;}
-                byte[]nN=new byte[8];i11l1l1l.nextBytes(nN);i11ilili.put(uid,nN);
+                byte[]expN=NcMap.get(uid);if(expN==null){Arrays.fill(sk,(byte)0);return;}
+                int nncDiff=0;for(int i=0;i<8;i++)nncDiff|=(rxN[i]^expN[i]);
+                if(nncDiff!=0){int f=FcMap.merge(uid,1,Integer::sum);if(f>=MaxFail)KickP(sp,sk);else Arrays.fill(sk,(byte)0);return;}
+                byte[]nN=new byte[8];SRng.nextBytes(nN);NcMap.put(uid,nN);
                 byte[]rxT=new byte[8];bb.get(rxT);
                 int tid=bb.getInt();
                 int nt=(int)(sp.serverLevel().getGameTime()&0xFFFFFFFFL);
                 if(Math.abs(nt-tid)>20){Arrays.fill(sk,(byte)0);return;}
                 byte fl=bb.get();double hx,hy,hz;
-                try{hx=i11l1iii.i11l1111(bb,(fl)&0x03);hy=i11l1iii.i11l1111(bb,(fl>>2)&0x03);hz=i11l1iii.i11l1111(bb,(fl>>4)&0x03);}
+                try{hx=CU.RdCrd(bb,(fl)&0x03);hy=CU.RdCrd(bb,(fl>>2)&0x03);hz=CU.RdCrd(bb,(fl>>4)&0x03);}
                 catch(Exception e){Arrays.fill(sk,(byte)0);return;}
                 Vec3 hp=new Vec3(hx,hy,hz);
-                for(i11ilill m:i11i11ii){
+                for(ML m:MlList){
                     if(m.getLevel()!=sp.serverLevel())continue;
-                    byte[]i111lili=ByteBuffer.allocate(8).putInt(m.i111llil.getId()).putInt(tid).array();
-                    byte[]i111ll11=i11l1iii.i11il1ii(sk,(byte)0x7F);
-                    for(int i=0;i<16;i++)i111ll11=i11l1iii.i11il1ii(i111ll11,i111lili[i&7]);
-                    int i1111iil=0;for(int i=0;i<8;i++)i1111iil|=(rxT[i]^i111ll11[i]);
-                    if(i1111iil!=0)continue;
-                    int i111i1i1=Math.min(Math.abs(nt-tid),10);
-                    double i111i1ll=0.5+i111i1i1*0.2;
-                    Vec3 i111i1li=m.i111i1l1[(int)((long)tid&31)];if(i111i1li==null)i111i1li=m.i1111ill;
-                    AABB i111iii1=new AABB(i111i1li.x-0.4-i111i1ll,i111i1li.y-i111i1ll,i111i1li.z-0.4-i111i1ll,i111i1li.x+0.4+i111i1ll,i111i1li.y+1.8+i111i1ll,i111i1li.z+0.4+i111i1ll);
-                    if(!i111iii1.contains(hp)){Arrays.fill(sk,(byte)0);return;}
-                    Vec3 i1111il1=sp.getEyePosition(1.0F);double i111il11=5.5+i111i1i1*0.3;
-                    if(i1111il1.distanceToSqr(hp)>i111il11*i111il11){Arrays.fill(sk,(byte)0);return;}
-                    BlockHitResult i111l11l=sp.serverLevel().clip(new ClipContext(i1111il1,hp,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,sp));
-                    if(i111l11l.getType()!=HitResult.Type.MISS){Arrays.fill(sk,(byte)0);return;}
-                    i111l1il=true;m.i11iiiil(sp);i111l1il=false;break;
+                    byte[]tknBuf=ByteBuffer.allocate(8).putInt(m.Ent.getId()).putInt(tid).array();
+                    byte[]tknKey=CU.KDF(sk,(byte)0x7F);
+                    for(int i=0;i<8;i++)tknKey=CU.KDF(tknKey,tknBuf[i&7]);
+                    int tkDiff=0;for(int i=0;i<8;i++)tkDiff|=(rxT[i]^tknKey[i]);
+                    if(tkDiff!=0)continue;
+                    int latTk=Math.min(Math.abs(nt-tid),10);
+                    double tolerance=0.5+latTk*0.2;
+                    Vec3 histPos=m.HPos[tid&31];if(histPos==null)histPos=m.pos;
+                    AABB hitBox=new AABB(histPos.x-0.4-tolerance,histPos.y-tolerance,histPos.z-0.4-tolerance,histPos.x+0.4+tolerance,histPos.y+1.8+tolerance,histPos.z+0.4+tolerance);
+                    if(!hitBox.contains(hp)){Arrays.fill(sk,(byte)0);return;}
+                    Vec3[]ph=PlrHist.get(uid);
+                    Vec3 plrHistPos=(ph!=null&&ph[tid&31]!=null)?ph[tid&31]:sp.position();
+                    Vec3 eyePos=plrHistPos.add(0,sp.getEyeHeight(),0);double maxReach=5.5+latTk*0.3;
+                    if(eyePos.distanceToSqr(hp)>maxReach*maxReach){Arrays.fill(sk,(byte)0);return;}
+                    BlockHitResult rayHit=sp.serverLevel().clip(new ClipContext(eyePos,hp,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,sp));
+                    if(rayHit.getType()!=HitResult.Type.MISS){Arrays.fill(sk,(byte)0);return;}
+                    LhtMap.put(uid,now);m.ApplyH(sp);break;
                 }
                 Arrays.fill(sk,(byte)0);
             });
             ctx.get().setPacketHandled(true);
         }
     }
-    static final class i11l11li{
-        final byte[]i11l1lll;i11l11li(byte[]d){i11l1lll=d;}private static final int i11ii11l=128;
-        static void i11li1ll(i11l11li p,FriendlyByteBuf b){b.writeByteArray(p.i11l1lll);}
-        static i11l11li i11ill11(FriendlyByteBuf b){return new i11l11li(b.readByteArray(i11ii11l));}
-        static void i11lii1l(i11l11li p,Supplier<NetworkEvent.Context>ctx){ctx.get().enqueueWork(()->i11l1l1i.i11lii1i(p.i11l1lll));ctx.get().setPacketHandled(true);}
+    static final class ECPkt{
+        final byte[]Data;ECPkt(byte[]d){Data=d;}private static final int MaxSz=128;
+        static void Enc(ECPkt p,FriendlyByteBuf b){b.writeByteArray(p.Data);}
+        static ECPkt Dec(FriendlyByteBuf b){return new ECPkt(b.readByteArray(MaxSz));}
+        static void Hdlr(ECPkt p,Supplier<NetworkEvent.Context>ctx){ctx.get().enqueueWork(()->CH.OnECtrl(p.Data));ctx.get().setPacketHandled(true);}
         static byte[]revoke(byte[]sk,int eid){
             try{byte[]pl=new byte[]{(byte)0xFF,(byte)(eid>>24),(byte)(eid>>16),(byte)(eid>>8),(byte)eid};
-                return i11l1iii.i11l1i1i(sk,pl,new byte[]{(byte)0xD4,(byte)0xFF});}catch(Exception e){throw new RuntimeException(e);}
+                return CU.EncAG(sk,pl,new byte[]{(byte)0xD4,(byte)0xFF});}catch(Exception e){throw new RuntimeException(e);}
         }
         static byte[]build(byte[]sk,int eid,String mid){
             try{byte[]mb=mid.getBytes(StandardCharsets.UTF_8);ByteBuffer bb=ByteBuffer.allocate(4+mb.length);bb.putInt(eid);bb.put(mb);
-                return i11l1iii.i11l1i1i(sk,bb.array(),new byte[]{(byte)0xD4,(byte)(eid&0xFF)});}catch(Exception e){throw new RuntimeException(e);}
+                return CU.EncAG(sk,bb.array(),new byte[]{(byte)0xD4,(byte)(eid&0xFF)});}catch(Exception e){throw new RuntimeException(e);}
         }
     }
-    static final class i11l11il{
-        final byte[]i11l1lll;i11l11il(byte[]d){i11l1lll=d;}private static final int i11ii11l=128;
-        static void i11li1ll(i11l11il p,FriendlyByteBuf b){b.writeByteArray(p.i11l1lll);}
-        static i11l11il i11ill11(FriendlyByteBuf b){return new i11l11il(b.readByteArray(i11ii11l));}
-        static void i11lii1l(i11l11il p,Supplier<NetworkEvent.Context>ctx){ctx.get().enqueueWork(()->i11l1l1i.i11li1li(p.i11l1lll));ctx.get().setPacketHandled(true);}
+    static final class SPkt{
+        final byte[]Data;SPkt(byte[]d){Data=d;}private static final int MaxSz=128;
+        static void Enc(SPkt p,FriendlyByteBuf b){b.writeByteArray(p.Data);}
+        static SPkt Dec(FriendlyByteBuf b){return new SPkt(b.readByteArray(MaxSz));}
+        static void Hdlr(SPkt p,Supplier<NetworkEvent.Context>ctx){ctx.get().enqueueWork(()->CH.OnSync(p.Data));ctx.get().setPacketHandled(true);}
         static byte[]build(byte[]sk,UUID uid,int eid,float hr,boolean hurt,double x,double y,double z,byte[]nonce,long seq){
             try{ByteBuffer bb=ByteBuffer.allocate(50);
                 bb.put((byte)0x01);bb.putLong(seq);bb.putInt(eid);bb.put(nonce);bb.putFloat(hr);bb.put((byte)(hurt?1:0));
                 bb.putDouble(x);bb.putDouble(y);bb.putDouble(z);
-                return i11l1iii.i11l1i1i(sk,bb.array(),uid.toString().getBytes(StandardCharsets.UTF_8));}catch(Exception e){throw new RuntimeException(e);}
+                return CU.EncAG(sk,bb.array(),uid.toString().getBytes(StandardCharsets.UTF_8));}catch(Exception e){throw new RuntimeException(e);}
         }
         static byte[]remove(byte[]sk,UUID uid,int eid,long seq){
             try{ByteBuffer bb=ByteBuffer.allocate(13);bb.put((byte)0x02);bb.putLong(seq);bb.putInt(eid);
-                return i11l1iii.i11l1i1i(sk,bb.array(),uid.toString().getBytes(StandardCharsets.UTF_8));}catch(Exception e){throw new RuntimeException(e);}
+                return CU.EncAG(sk,bb.array(),uid.toString().getBytes(StandardCharsets.UTF_8));}catch(Exception e){throw new RuntimeException(e);}
+        }
+    }
+    @SubscribeEvent
+    public static void onConfigLoaded(ModConfigEvent.Loading event) {
+        if (event.getConfig().getSpec() == ARV2Config.SERVER_SPEC) {
+            enableSphereBreak = ARV2Config.ENABLE_SPHERE_BREAK.get();
         }
     }
     @Mod.EventBusSubscriber(modid=ExtraBossRush.MOD_ID,bus=Mod.EventBusSubscriber.Bus.FORGE,value=Dist.CLIENT)
-    static final class i11l1l1i{
-        private static boolean i11111ii=false;
-        private static javax.crypto.SecretKey i111ii1l=null;
-        private static AtomicLong i111ii11=new AtomicLong(0L);
-        static final Set<Integer>                    i11liii1=Collections.synchronizedSet(new HashSet<>());
-        static final ConcurrentHashMap<Integer,Vec3> i111111l=new ConcurrentHashMap<>();
-        private static volatile long   i11111i1=-1L;
-        private static volatile byte[] i111llli=null;
-        private static final double i1111111=4.5;
+    static final class CH{
+        private static boolean SwgPrev=false;
+        private static javax.crypto.SecretKey SesKey=null;
+        private static AtomicLong Ctr=new AtomicLong(0L);
+        static final Set<Integer>                    EntIds=Collections.synchronizedSet(new HashSet<>());
+        static final ConcurrentHashMap<Integer,Vec3> EntPos=new ConcurrentHashMap<>();
+        private static volatile long   LastSeq=-1L;
+        private static volatile byte[] LastNonce=null;
+        private static final double ReachSq=4.5;
         @OnlyIn(Dist.CLIENT)
-        static void i111ili1(byte[]spub){
+        static void OnPubKey(byte[]spub){
             try{
-                KeyPair kp=i11l1iii.i11l111i();byte[]raw=i11l1iii.i11l11ll(kp.getPrivate(),spub);
-                if(i111ii1l!=null){try{((javax.security.auth.Destroyable)i111ii1l).destroy();}catch(Exception ignored){}}
-                i111ii1l=new SecretKeySpec(raw,new String(new byte[]{0x41,0x45,0x53}));
-                Arrays.fill(raw,(byte)0);i111ii11.set(0L);i11111i1=-1L;i111llli=null;
-                i11l1ll1.sendToServer(new i11l1l11(kp.getPublic().getEncoded()));
+                KeyPair kp=CU.GenKP();byte[]raw=CU.ECDH(kp.getPrivate(),spub);
+                if(SesKey!=null){try{((javax.security.auth.Destroyable)SesKey).destroy();}catch(Exception ignored){}}
+                SesKey=new SecretKeySpec(raw,new String(new byte[]{0x41,0x45,0x53}));
+                Arrays.fill(raw,(byte)0);Ctr.set(0L);LastSeq=-1L;LastNonce=null;
+                Chan.sendToServer(new CKPkt(kp.getPublic().getEncoded()));
             }catch(Exception ignored){}
         }
         @SubscribeEvent @OnlyIn(Dist.CLIENT)
-        static void i11li11l(TickEvent.ClientTickEvent e){
+        static void OnCliTick(TickEvent.ClientTickEvent e){
             if(e.phase!=TickEvent.Phase.START)return;
             Minecraft mc=Minecraft.getInstance();
-            if(mc.player==null||mc.level==null||i111ii1l==null)return;
-            try{if(((javax.security.auth.Destroyable)i111ii1l).isDestroyed())return;}catch(Exception ignored){}
-            boolean sw=mc.player.swinging;if(sw&!i11111ii)i1111lll(mc);i11111ii=sw;
+            if(mc.player==null||mc.level==null||SesKey==null)return;
+            try{if(((javax.security.auth.Destroyable)SesKey).isDestroyed())return;}catch(Exception ignored){}
+            boolean sw=mc.player.swinging&&mc.options.keyAttack.isDown();if(sw&&!SwgPrev)swgCheck(mc);SwgPrev=sw;
         }
         @OnlyIn(Dist.CLIENT)
-        private static void i1111lll(Minecraft mc){
-            Vec3 eye=mc.player.getEyePosition(1.0F);Vec3 end=eye.add(mc.player.getLookAngle().scale(i1111111));
-            for(net.minecraft.world.entity.Entity ent:mc.level.entitiesForRendering()){
-                if(!(ent instanceof GoMEntity g))continue;if(!i11liii1.contains(g.getId()))continue;
-                Vec3 ap=i111111l.get(g.getId());if(ap==null)continue;
+        private static void swgCheck(Minecraft mc){
+            if(EntIds.isEmpty())return;
+            Vec3 eye=mc.player.getEyePosition(1.0F);Vec3 end=eye.add(mc.player.getLookAngle().scale(ReachSq));
+            for(net.minecraft.world.entity.Entity Ent:mc.level.entitiesForRendering()){
+                if(!(Ent instanceof GoMEntity g))continue;if(!EntIds.contains(g.getId()))continue;
+                Vec3 ap=EntPos.get(g.getId());if(ap==null)continue;
                 AABB box=new AABB(ap.x-0.4,ap.y,ap.z-0.4,ap.x+0.4,ap.y+1.8,ap.z+0.4);
                 Optional<Vec3>hit=box.clip(eye,end);if(hit.isEmpty())continue;
-                Vec3 hp=hit.get();if(eye.distanceToSqr(hp)>(i1111111+0.1)*(i1111111+0.1))continue;
+                Vec3 hp=hit.get();if(eye.distanceToSqr(hp)>(ReachSq+0.1)*(ReachSq+0.1))continue;
                 boolean surf=box.inflate(0.05).contains(hp)&&!box.deflate(0.05).contains(hp);if(!surf)continue;
                 BlockHitResult bhr=mc.level.clip(new ClipContext(eye,hp,ClipContext.Block.COLLIDER,ClipContext.Fluid.NONE,mc.player));
                 if(bhr.getType()!=HitResult.Type.MISS)continue;
-                i11l11ii(g,hp,mc);return;
+                DoHit(g,hp,mc);return;
             }
         }
         @OnlyIn(Dist.CLIENT)
-        private static void i11l11ii(GoMEntity g,Vec3 hp,Minecraft mc){
-            if(i111ii1l==null)return;byte[]nc=i111llli;if(nc==null)return;
+        private static void DoHit(GoMEntity g,Vec3 hp,Minecraft mc){
+            if(SesKey==null)return;byte[]nc=LastNonce;if(nc==null)return;
             try{
-                int tick=(int)(mc.level.getGameTime()&0xFFFFFFFFL);byte[]rk=i111ii1l.getEncoded();
-                byte tx=i11l1iii.i11l11i1(hp.x),ty=i11l1iii.i11l11i1(hp.y),tz=i11l1iii.i11l11i1(hp.z);
+                int tick=(int)(mc.level.getGameTime()&0xFFFFFFFFL);byte[]rk=SesKey.getEncoded();
+                byte tx=CU.HpTyp(hp.x),ty=CU.HpTyp(hp.y),tz=CU.HpTyp(hp.z);
                 byte fl=(byte)((tx&0x03)|((ty&0x03)<<2)|((tz&0x03)<<4));
-                byte[]i111lili=ByteBuffer.allocate(8).putInt(g.getId()).putInt(tick).array();
-                byte[]i111ll11=i11l1iii.i11il1ii(rk,(byte)0x7F);for(int i=0;i<16;i++)i111ll11=i11l1iii.i11il1ii(i111ll11,i111lili[i&7]);
-                byte[]token=Arrays.copyOf(i111ll11,8);
-                int sz=21+i11l1iii.i11il11l(tx)+i11l1iii.i11il11l(ty)+i11l1iii.i11il11l(tz);ByteBuffer bb=ByteBuffer.allocate(sz);
+                byte[]tknBuf=ByteBuffer.allocate(8).putInt(g.getId()).putInt(tick).array();
+                byte[]tknKey=CU.KDF(rk,(byte)0x7F);for(int i=0;i<8;i++)tknKey=CU.KDF(tknKey,tknBuf[i&7]);
+                byte[]token=Arrays.copyOf(tknKey,8);
+                int sz=21+CU.HpSz(tx)+CU.HpSz(ty)+CU.HpSz(tz);ByteBuffer bb=ByteBuffer.allocate(sz);
                 bb.put(nc);bb.put(token);bb.putInt(tick);bb.put(fl);
-                i11l1iii.i11l111l(bb,hp.x,tx);i11l1iii.i11l111l(bb,hp.y,ty);i11l1iii.i11l111l(bb,hp.z,tz);
-                byte[]aad=mc.player.getUUID().toString().getBytes(StandardCharsets.UTF_8);
-                byte[]ci=i11l1iii.i11il1li(rk,bb.array(),aad,i111ii11);i11l1ll1.sendToServer(new i11l11l1(ci));
+                CU.WrCrd(bb,hp.x,tx);CU.WrCrd(bb,hp.y,ty);CU.WrCrd(bb,hp.z,tz);
+                byte[]ci=CU.EncDbl(rk,bb.array(),mc.player.getUUID().toString().getBytes(StandardCharsets.UTF_8),Ctr);Chan.sendToServer(new HRPkt(ci));
             }catch(Exception ignored){}
         }
         @OnlyIn(Dist.CLIENT)
-        static void i11lii1i(byte[]data){
-            if(i111ii1l==null||data==null||data.length<28)return;
+        static void OnECtrl(byte[]Data){
+            if(SesKey==null||Data==null||Data.length<28)return;
             try{
-                byte[]rk=i111ii1l.getEncoded();byte fc=(data.length>12)?data[12]:0;
-                byte[]plain=i11l1iii.i11il1il(rk,data,new byte[]{(byte)0xD4,fc});if(plain==null||plain.length<4)return;
-                if(plain.length>=5&&(plain[0]&0xFF)==0xFF){i11liii1.remove(ByteBuffer.wrap(plain,1,4).getInt());}
-                else if(plain.length>=4){i11liii1.add(ByteBuffer.wrap(plain).getInt());}
+                byte[]rk=SesKey.getEncoded();byte fc=(Data.length>12)?Data[12]:0;
+                byte[]plain=CU.DecAG(rk,Data,new byte[]{(byte)0xD4,fc});if(plain==null||plain.length<4)return;
+                if(plain.length>=5&&(plain[0]&0xFF)==0xFF){EntIds.remove(ByteBuffer.wrap(plain,1,4).getInt());}
+                else if(plain.length>=4){EntIds.add(ByteBuffer.wrap(plain).getInt());}
             }catch(Exception ignored){}
         }
         @OnlyIn(Dist.CLIENT)
-        static void i11li1li(byte[]data){
-            if(i111ii1l==null||data==null)return;
+        static void OnSync(byte[]Data){
+            if(SesKey==null||Data==null)return;
             try{
-                byte[]rk=i111ii1l.getEncoded();Minecraft mc=Minecraft.getInstance();if(mc.player==null)return;
+                byte[]rk=SesKey.getEncoded();Minecraft mc=Minecraft.getInstance();if(mc.player==null)return;
                 byte[]aad=mc.player.getUUID().toString().getBytes(StandardCharsets.UTF_8);
-                byte[]plain=i11l1iii.i11il1il(rk,data,aad);if(plain==null||plain.length<13)return;
+                byte[]plain=CU.DecAG(rk,Data,aad);if(plain==null||plain.length<13)return;
                 ByteBuffer bb=ByteBuffer.wrap(plain);byte type=bb.get();long seq=bb.getLong();
-                if(seq<=i11111i1)return;i11111i1=seq;int eid=bb.getInt();
-                if(type==(byte)0x02){i11liii1.remove(eid);i111111l.remove(eid);return;}
+                if(seq<=LastSeq)return;LastSeq=seq;int eid=bb.getInt();
+                if(type==(byte)0x02){EntIds.remove(eid);EntPos.remove(eid);return;}
                 if(type!=(byte)0x01||plain.length<50)return;
-                byte[]rxN=new byte[8];bb.get(rxN);i111llli=rxN;bb.getFloat();bb.get();
-                double ax=bb.getDouble(),ay=bb.getDouble(),az=bb.getDouble();i111111l.put(eid,new Vec3(ax,ay,az));
+                byte[]rxN=new byte[8];bb.get(rxN);LastNonce=rxN;bb.getFloat();bb.get();
+                double ax=bb.getDouble(),ay=bb.getDouble(),az=bb.getDouble();EntPos.put(eid,new Vec3(ax,ay,az));
             }catch(Exception ignored){}
         }
         @SubscribeEvent @OnlyIn(Dist.CLIENT)
-        static void i11l1i11(LevelEvent.Unload e){
-            if(!e.getLevel().isClientSide())return;i11111ii=false;
-            if(i111ii1l!=null){try{((javax.security.auth.Destroyable)i111ii1l).destroy();}catch(Exception ignored){}i111ii1l=null;}
-            i111ii11.set(0L);i11liii1.clear();i111111l.clear();i11111i1=-1L;i111llli=null;
+        static void OnLvUnld(LevelEvent.Unload e){
+            if(!e.getLevel().isClientSide())return;SwgPrev=false;
+            if(SesKey!=null){try{((javax.security.auth.Destroyable)SesKey).destroy();}catch(Exception ignored){}SesKey=null;}
+            Ctr.set(0L);EntIds.clear();EntPos.clear();LastSeq=-1L;LastNonce=null;
         }
     }
     @SubscribeEvent
-    public static void i11l111i(PlayerEvent.PlayerLoggedInEvent e){
+    public static void OnLogin(PlayerEvent.PlayerLoggedInEvent e){
         if(!(e.getEntity() instanceof ServerPlayer sp))return;
-        UUID uid=sp.getUUID();i11i11ll(uid);i11i1i11.put(uid,(byte)0);
-        KeyPair kp=i11l1iii.i11l111i();i11l1lii.put(uid,kp);i11l1ll1.send(PacketDistributor.PLAYER.with(()->sp),new i11l1ili(kp.getPublic().getEncoded()));
+        UUID uid=sp.getUUID();PurgS(uid);StMap.put(uid,(byte)0);
+        KeyPair kp=CU.GenKP();KpMap.put(uid,kp);Chan.send(PacketDistributor.PLAYER.with(()->sp),new PKPkt(kp.getPublic().getEncoded()));
     }
     @SubscribeEvent
-    public static void i11l11ll(PlayerEvent.PlayerLoggedOutEvent e){
-        if(!(e.getEntity() instanceof ServerPlayer sp))return;i11i11ll(sp.getUUID());
+    public static void OnLogout(PlayerEvent.PlayerLoggedOutEvent e){
+        if(!(e.getEntity() instanceof ServerPlayer sp))return;PurgS(sp.getUUID());
     }
     @SubscribeEvent
-    public static void i11i1l1i(TickEvent.LevelTickEvent event){
+    public static void OnLvTick(TickEvent.LevelTickEvent event){
         if(event.phase!=TickEvent.Phase.END)return;if(!(event.level instanceof ServerLevel level))return;
-        i11i11ii.removeIf(master->{
-            if(master.getLevel()!=level)return false;master.i11i11li();
-            if(master.i11i11il()){master.discard();return true;}return false;
+        for(ServerPlayer sp:level.players()){
+            UUID uid=sp.getUUID();
+            Vec3[]ph=PlrHist.computeIfAbsent(uid,u->new Vec3[32]);
+            float[]py=PlrYaw.computeIfAbsent(uid,u->new float[32]);
+            int slot=(int)(level.getGameTime()&31);
+            ph[slot]=sp.position();py[slot]=sp.getYRot();
+        }
+        MlList.removeIf(master->{
+            if(master.getLevel()!=level)return false;master.TickLP();
+            if(master.IsDead()){master.discard();return true;}return false;
         });
     }
     @SubscribeEvent
-    public static void i11i1l11(LevelEvent.Unload event){
-        if(event.getLevel().isClientSide())return;i11i11ii.forEach(i11ilill::discard);i11i11ii.clear();
+    public static void OnLvUnld(LevelEvent.Unload event){
+        if(event.getLevel().isClientSide())return;MlList.forEach(ML::discard);MlList.clear();
     }
 
 
     @SubscribeEvent
-    public static void i11i1ili(net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickBlock event){
+    public static void OnRCBlk(net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickBlock event){
         if(event.getLevel().isClientSide())return;
         if(!(event.getEntity() instanceof ServerPlayer sp))return;
         if(!sp.getMainHandItem().is(GoMItems.MAGIC_GUARDIAN_EGG.get()))return;
@@ -568,20 +592,20 @@ public class GoMEntity extends Monster {
         net.minecraft.core.BlockPos bp=event.getPos().relative(event.getFace());
         Vec3 spawnPos=new Vec3(bp.getX()+0.5,bp.getY(),bp.getZ()+0.5);
         if(!sp.isCreative())sp.getMainHandItem().shrink(1);
-        i11i11ii.add(new i11ilill(i11l1il1(),(ServerLevel)event.getLevel(),spawnPos));
+        MlList.add(new ML(GenId(),(ServerLevel)event.getLevel(),spawnPos));
     }
     @SubscribeEvent
-    public static void i11i1il1(net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickItem event){
+    public static void OnRCItm(net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickItem event){
         if(event.getLevel().isClientSide())return;
         if(!(event.getEntity() instanceof ServerPlayer sp))return;
         if(!sp.getMainHandItem().is(GoMItems.MAGIC_GUARDIAN_EGG.get()))return;
         event.setCanceled(true);
         Vec3 spawnPos=sp.getEyePosition(1.0F).add(sp.getLookAngle().scale(3.0));
         if(!sp.isCreative())sp.getMainHandItem().shrink(1);
-        i11i11ii.add(new i11ilill(i11l1il1(),(ServerLevel)event.getLevel(),spawnPos));
+        MlList.add(new ML(GenId(),(ServerLevel)event.getLevel(),spawnPos));
     }
     @SubscribeEvent
-    public static void i11i1iii(RegisterCommandsEvent event){
+    public static void OnRegCmd(RegisterCommandsEvent event){
         event.getDispatcher().register(
                 net.minecraft.commands.Commands.literal("gomentity").requires(s->s.hasPermission(2))
 
@@ -591,7 +615,7 @@ public class GoMEntity extends Monster {
                                 src.sendFailure(Component.literal("Player only"));return 0;
                             }
                             Vec3 sp2=p.position().add(p.getLookAngle().scale(5));
-                            i11i11ii.add(new i11ilill(i11l1il1(),p.serverLevel(),sp2));
+                            MlList.add(new ML(GenId(),p.serverLevel(),sp2));
                             src.sendSuccess(()->Component.literal("Spawned"),true);return 1;
                         })
 
@@ -602,270 +626,393 @@ public class GoMEntity extends Monster {
                                     ServerLevel lv2;
                                     if(src.getEntity() instanceof ServerPlayer p2)lv2=p2.serverLevel();
                                     else lv2=(ServerLevel)src.getLevel();
-                                    i11i11ii.add(new i11ilill(i11l1il1(),lv2,pos2));
+                                    MlList.add(new ML(GenId(),lv2,pos2));
                                     src.sendSuccess(()->Component.literal("Spawned at "+pos2),true);return 1;
                                 })
                         )
         );
     }
-    interface i11li1l1{byte[]i11l1lli();void i11l1lli(byte[]c);}
-    static final class i11ii1il implements i11li1l1{
-        private byte[]i11iili1;
-        public byte[]i11l1lli(){return i11iili1==null?null:Arrays.copyOf(i11iili1,i11iili1.length);}
-        public void i11l1lli(byte[]c){i11iili1=c==null?null:Arrays.copyOf(c,c.length);}
+    interface CS{byte[]get();void set(byte[]c);}
+    static final class CSI implements CS{
+        private byte[]skCv;
+        public byte[]get(){return skCv==null?null:Arrays.copyOf(skCv,skCv.length);}
+        public void set(byte[]c){skCv=c==null?null:Arrays.copyOf(c,c.length);}
     }
-    static final class i11ilill{
-        private static final int i111iiii=0x00,i111illi=0x04,i111iiil=0x08,i111iili=0x0C,i111ilil=0x10,i111iill=0x18;
-        private static final byte[]i11liiii,i11liiil,i11liil1,i11liili,i11liill,i111l1li;
-        private static final byte[]i111li11;
-        private static byte[]i111l111(String cn){
+    static final class ML{
+        private static final int O_TICK=0x00,O_RT=0x04,O_FT=0x08,O_STUN=0x0C,O_LAST=0x10,O_MAXHP=0x18;
+        private static final byte[]HBas_ML2,HBas_CU2,HBas_HR2,HBas_EC2,HBas_SP2,OpKey;
+        private static final byte[]OpXor;
+
+        private static boolean ChkRefl(){
             try{
-                java.io.InputStream is=i11ilill.class.getClassLoader().getResourceAsStream(cn);
+                java.lang.reflect.Field[]fs=ML.class.getDeclaredFields();
+                for(java.lang.reflect.Field f:fs){
+                    try{
+                        f.setAccessible(false);
+                        if(f.isAccessible())return true;
+                    }catch(SecurityException ignored){}
+                }
+                for(String arg:ManagementFactory.getRuntimeMXBean().getInputArguments()){
+                    if(arg.startsWith("-javaagent")||arg.contains("instrument")||arg.contains("jdwp"))return true;
+                }
+            }catch(Exception e){return true;}
+            return false;
+        }
+        private static byte[]HashCls(String cn){
+            try{
+                java.io.InputStream is=ML.class.getClassLoader().getResourceAsStream(cn);
                 if(is==null)return new byte[32];
                 byte[]r=MessageDigest.getInstance(new String(new byte[]{0x53,0x48,0x41,0x2D,0x32,0x35,0x36})).digest(is.readAllBytes());
                 is.close();return r;
             }catch(Exception e){return new byte[32];}
         }
         static{
-            i11liiii   =i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11ilill.class");
-            i11liiil=i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l1iii.class");
-            i11liil1 =i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11l1.class");
-            i11liili =i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11li.class");
-            i11liill =i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11il.class");
-            byte[]ok=i11l1iii.i11il1ii(i11liiii,(byte)0x55);i111l1li=ok;
+            HBas_ML2   =HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ML.class");
+            HBas_CU2=HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$CU.class");
+            HBas_HR2 =HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$HRPkt.class");
+            HBas_EC2 =HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ECPkt.class");
+            HBas_SP2 =HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$SPkt.class");
+            byte[]ok=CU.KDF(HBas_ML2,(byte)0x55);OpKey=ok;
             byte[]plain={0x00,0x03,0x07,0x01,0x06,0x04,0x05,0x02};
             byte[]ot=new byte[8];for(int i=0;i<8;i++)ot[i]=(byte)(plain[i]^ok[i]);
-            i111li11=ot;
+            OpXor=ot;
         }
-        private static int i111illl=0;
-        private static final int   i111l11i=46;
-        private static final float i111iil1=65536.0F;
-        private static final long  i111il1l=10L;
-        private static final double i111ilii=1024.0*1024.0;
-        private static final Random i111liil=new Random();
-        static final ConcurrentHashMap<Integer,Long>i111l1i1=new ConcurrentHashMap<>();
-        final String i111l1ll;
-        private final ServerLevel i111ill1;
-        private final ServerBossEvent i111il1i;
-        final GoMEntity i111llil;
-        Vec3 i1111ill;
-        private final byte[]i1111l1i=new byte[0x20];
-        private final byte[]i111lll1=new byte[16];
-        private final byte[]i11i111l=new byte[16];
-        private final i11li1l1   i11i11i1=new i11ii1il();
-        private final long[]i111l1l1=new long[1];
-        private final byte[]i11i1111=new byte[8];
-        private final byte[]i11i1lii=new byte[8];
-        final Vec3[]i111i1l1=new Vec3[32];
-        private int i111lii1(int o){int p=o&0xF;return((i111lll1[p]&0xFF)<<24)|((i111lll1[(p+1)&0xF]&0xFF)<<16)|((i111lll1[(p+2)&0xF]&0xFF)<<8)|(i111lll1[(p+3)&0xF]&0xFF);}
-        private long i111l1ii(int o){int p=o&0xF;return(((long)i111lll1[p]&0xFF)<<56)|(((long)i111lll1[(p+1)&0xF]&0xFF)<<48)|(((long)i111lll1[(p+2)&0xF]&0xFF)<<40)|(((long)i111lll1[(p+3)&0xF]&0xFF)<<32)|(((long)i111lll1[(p+4)&0xF]&0xFF)<<24)|(((long)i111lll1[(p+5)&0xF]&0xFF)<<16)|(((long)i111lll1[(p+6)&0xF]&0xFF)<<8)|((long)i111lll1[(p+7)&0xF]&0xFF);}
-        private int i11i1lil(int o){return ByteBuffer.wrap(i1111l1i,o,4).getInt()^i111lii1(o);}
-        private void i11i1l1l(int o,int v){byte[]b=new byte[4];ByteBuffer.wrap(b).putInt(v^i111lii1(o));System.arraycopy(b,0,i1111l1i,o,4);}
-        private long i11i1li1(int o){return ByteBuffer.wrap(i1111l1i,o,8).getLong()^i111l1ii(o);}
-        private void i11ii1i1(int o,long v){byte[]b=new byte[8];ByteBuffer.wrap(b).putLong(v^i111l1ii(o));System.arraycopy(b,0,i1111l1i,o,8);}
-        private float i11ii1ii(int o){return Float.intBitsToFloat(i11i1lil(o));}
-        private void i11ii11i(int o,float v){i11i1l1l(o,Float.floatToRawIntBits(v));}
-        private byte[]i11i111i(){byte[]k=i11l1iii.i11il1ii(i11i111l,(byte)0x42);for(int i=0;i<16;i++)k[i]^=i11il1ll[i];return Arrays.copyOf(k,16);}
-        private float i111lli1(){return i11l1iii.i11l1iil(i11i111i(),i11i11i1.i11l1lli());}
-        private void  i111llii(float v){i11i11i1.i11l1lli(i11l1iii.i11l1ii1(i11i111i(),v));}
-        private void i11111il(float v){i111l1i1.put(i111llil.getId(),(long)Float.floatToRawIntBits(v)^(i111l1l1[0]&0xFFFFFFFFL));}
-        private boolean i11lil1l(){
-            Long e=i111l1i1.get(i111llil.getId());if(e==null)return true;
-            float s=Float.intBitsToFloat((int)((e^(i111l1l1[0]&0xFFFFFFFFL))&0xFFFFFFFFL));
-            return Math.abs(i111lli1()-s)<1.0f;
+        private static int KillCnt=0;
+        private static final int   MaxKills=46;
+        private static final float MaxHp=65536.0F;
+        private static final long  MinHitDly=10L;
+        private static final double RangeSqr=1024.0*1024.0;
+        private static final Random Rng=new Random();
+        static final ConcurrentHashMap<Integer,Long>HpXT=new ConcurrentHashMap<>();
+        final String MlId;
+        private final ServerLevel SLvl;
+        private final ServerBossEvent BEvt;
+        final GoMEntity Ent;
+        Vec3 pos;
+        private final byte[]SBuf=new byte[0x20];
+        private final byte[]IvBuf=new byte[16];
+        private final byte[]AkBuf=new byte[16];
+        private final CS   CSt=new CSI();
+        private final ReentrantLock HitLock=new ReentrantLock();
+        private final long[]TSeq=new long[1];
+        private final byte[]OpK=new byte[8];
+        private final byte[]OpX=new byte[8];
+        final Vec3[]HPos=new Vec3[32];
+        private BigInteger PN,PN2,PLam,PMu;
+        private BigInteger HpPail;
+        private byte[] HpMac;
+        private static final int PailBits=1024;
+        private static BigInteger[] GenPK(SecureRandom Rng){
+            BigInteger p=BigInteger.probablePrime(PailBits/2,Rng);
+            BigInteger q;
+            do{q=BigInteger.probablePrime(PailBits/2,Rng);}while(q.equals(p));
+            BigInteger n=p.multiply(q),n2=n.multiply(n);
+            BigInteger pm1=p.subtract(BigInteger.ONE),qm1=q.subtract(BigInteger.ONE);
+            BigInteger lam=pm1.divide(pm1.gcd(qm1)).multiply(qm1);
+            BigInteger mu=lam.modInverse(n);
+            return new BigInteger[]{n,n2,lam,mu};
         }
-        private void i1111l11(int sl){
-            int op=(i11i1111[sl&7]^i11i1lii[sl&7])&0xFF;
+        private BigInteger PailEnc(long m){
+            BigInteger mB=BigInteger.valueOf(m);
+            if(mB.signum()<0)mB=PN.add(mB);
+            BigInteger r;
+            do{r=new BigInteger(PailBits,SRng).mod(PN);}while(r.compareTo(BigInteger.ONE)<=0);
+            BigInteger c1=BigInteger.ONE.add(mB.multiply(PN)).mod(PN2);
+            BigInteger c2=r.modPow(PN,PN2);
+            return c1.multiply(c2).mod(PN2);
+        }
+        private long PailDec(BigInteger c){
+            BigInteger cl=c.modPow(PLam,PN2);
+            BigInteger lc=cl.subtract(BigInteger.ONE).divide(PN);
+            BigInteger m=lc.multiply(PMu).mod(PN);
+            if(m.compareTo(PN.divide(BigInteger.TWO))>0)m=m.subtract(PN);
+            return m.longValue();
+        }
+        private void PailApply(long delta){
+            HpPail=HpPail.multiply(PailEnc(delta)).mod(PN2);
+        }
+        private byte[] MkMac(long hpLong){
+            try{
+                javax.crypto.Mac mac=javax.crypto.Mac.getInstance("HmacSHA256");
+                mac.init(new SecretKeySpec(HpKey(),"HmacSHA256"));
+                mac.update(ByteBuffer.allocate(8).putLong(hpLong).array());
+                return mac.doFinal();
+            }catch(Exception e){return null;}
+        }
+        private boolean ChkMac(long hpLong){
+            if(HpMac==null)return false;
+            byte[]exp=MkMac(hpLong);
+            if(exp==null)return false;
+            int d=0;for(int i=0;i<32;i++)d|=(HpMac[i]^exp[i]);return d==0;
+        }
+        private int IvMskI(int o){int p=o&0xF;return((IvBuf[p]&0xFF)<<24)|((IvBuf[(p+1)&0xF]&0xFF)<<16)|((IvBuf[(p+2)&0xF]&0xFF)<<8)|(IvBuf[(p+3)&0xF]&0xFF);}
+        private long IvMskL(int o){int p=o&0xF;return(((long)IvBuf[p]&0xFF)<<56)|(((long)IvBuf[(p+1)&0xF]&0xFF)<<48)|(((long)IvBuf[(p+2)&0xF]&0xFF)<<40)|(((long)IvBuf[(p+3)&0xF]&0xFF)<<32)|(((long)IvBuf[(p+4)&0xF]&0xFF)<<24)|(((long)IvBuf[(p+5)&0xF]&0xFF)<<16)|(((long)IvBuf[(p+6)&0xF]&0xFF)<<8)|((long)IvBuf[(p+7)&0xF]&0xFF);}
+        private int RdI(int o){return ByteBuffer.wrap(SBuf,o,4).getInt()^IvMskI(o);}
+        private void WrI(int o,int v){byte[]b=new byte[4];ByteBuffer.wrap(b).putInt(v^IvMskI(o));System.arraycopy(b,0,SBuf,o,4);}
+        private long RdL(int o){return ByteBuffer.wrap(SBuf,o,8).getLong()^IvMskL(o);}
+        private void WrL(int o,long v){byte[]b=new byte[8];ByteBuffer.wrap(b).putLong(v^IvMskL(o));System.arraycopy(b,0,SBuf,o,8);}
+        private float RdF(int o){return Float.intBitsToFloat(RdI(o));}
+        private void WrF(int o,float v){WrI(o,Float.floatToRawIntBits(v));}
+        private byte[]HpKey(){byte[]k=CU.KDF(AkBuf,(byte)0x42);for(int i=0;i<16;i++)k[i]^=PiPep[i];return Arrays.copyOf(k,16);}
+        private float GetHp(){return CU.DecHPF(HpKey(),CSt.get());}
+        private void  SetHp(float v){
+            CSt.set(CU.EncHPF(HpKey(),v));
+            if(HpPail!=null){
+                long prev=PailDec(HpPail);
+                long cur=Math.round(v*1000L);
+                if(prev!=cur)PailApply(cur-prev);
+            }
+            HpMac=MkMac(Math.round(v*1000L));
+        }
+        private void SetSHp(float v){HpXT.put(Ent.getId(),(long)Float.floatToRawIntBits(v)^(TSeq[0]&0xFFFFFFFFL));}
+
+        private float PolyCalc(float hp,float dmg){
+            int path=(OpK[(int)(TSeq[0]&7)]^OpX[(int)(TSeq[0]&7)])&0x0F;
+            float r;
+            switch(path){
+                case 0:r=hp-dmg;break;
+                case 1:r=-(dmg-hp);break;
+                case 2:{int hb=Float.floatToRawIntBits(hp)^0xFFFFFFFF,db=Float.floatToRawIntBits(dmg)^0xFFFFFFFF;
+                    r=Float.intBitsToFloat(hb^0xFFFFFFFF)-Float.intBitsToFloat(db^0xFFFFFFFF);break;}
+                case 3:{double h=hp,d=dmg;r=(float)(h-d);break;}
+                case 4:{int k=0x55AA55AA;
+                    float h2=Float.intBitsToFloat(Float.floatToRawIntBits(hp)^k^k);
+                    float d2=Float.intBitsToFloat(Float.floatToRawIntBits(dmg)^k^k);
+                    r=h2-d2;break;}
+                case 5:{byte[]b=ByteBuffer.allocate(8).putFloat(hp).putFloat(dmg).array();
+                    r=ByteBuffer.wrap(b,0,4).getFloat()-ByteBuffer.wrap(b,4,4).getFloat();break;}
+                case 6:{float acc=hp;acc+=-dmg;r=acc;break;}
+                case 7:{long hl=Double.doubleToRawLongBits(hp),dl=Double.doubleToRawLongBits(dmg);
+                    r=(float)(Double.longBitsToDouble(hl)-Double.longBitsToDouble(dl));break;}
+                case 8:{int hb=Float.floatToRawIntBits(hp),db=Float.floatToRawIntBits(dmg);
+                    hb=(hb<<1)|(hb>>>31);db=(db<<1)|(db>>>31);
+                    hb=(hb>>>1)|(hb<<31);db=(db>>>1)|(db<<31);
+                    r=Float.intBitsToFloat(hb)-Float.intBitsToFloat(db);break;}
+                case 9:{float t=hp*2f;r=t*0.5f-dmg*2f*0.5f;break;}
+                case 10:{int hb=Float.floatToRawIntBits(hp),db=Float.floatToRawIntBits(dmg);
+                    hb^=0xA5A5A5A5;db^=0xA5A5A5A5;hb^=0xA5A5A5A5;db^=0xA5A5A5A5;
+                    r=Float.intBitsToFloat(hb)-Float.intBitsToFloat(db);break;}
+                default:r=hp-dmg;break;
+            }
+            return Math.max(0f,r);
+        }
+        private boolean VerSH(){
+            Long e=HpXT.get(Ent.getId());if(e==null)return true;
+            float shd=Float.intBitsToFloat((int)((e^(TSeq[0]&0xFFFFFFFFL))&0xFFFFFFFFL));
+            float hp=GetHp();
+            if(Math.abs(hp-shd)>=1.0f)return false;
+            if(HpPail!=null){
+                float pailHp=(float)(PailDec(HpPail)/1000.0);
+                if(Math.abs(hp-pailHp)>=1.0f)return false;
+            }
+            if(!ChkMac(Math.round(hp*1000L)))return false;
+            return true;
+        }
+        private void DispOp(int sl){
+            int op=(OpK[sl&7]^OpX[sl&7])&0xFF;
             switch(op){
-                case 0x00->i1111i11();case 0x01->i1111l1l();case 0x02->i11111l1();case 0x03->i11111li();
-                case 0x04->i1111i1l();case 0x05->i1111i1i();case 0x06->i111ii1i();case 0x07->i1111ii1();
+                case 0x00->Rekey();case 0x01->SyncHD();case 0x02->FireTkA();case 0x03->FireTkB();
+                case 0x04->SnapPos();case 0x05->VerCH();case 0x06->UpdBB();case 0x07->TkStun();
             }
         }
-        private void i1111i11(){
-            int t0=i11i1lil(i111iiii),t1=i11i1lil(i111illi),t2=i11i1lil(i111iiil),t3=i11i1lil(i111iili);long t4=i11i1li1(i111ilil);float t5=i11ii1ii(i111iill);
-            new SecureRandom().nextBytes(i111lll1);
-            i11i1l1l(i111iiii,t0);i11i1l1l(i111illi,t1);i11i1l1l(i111iiil,t2);i11i1l1l(i111iili,t3);i11ii1i1(i111ilil,t4);i11ii11i(i111iill,t5);
-            float i11iili1=i111lli1();new SecureRandom().nextBytes(i11i111l);i111llii(i11iili1);
-            i111l1l1[0]=new SecureRandom().nextLong();i11111il(i11iili1);
+        private void Rekey(){
+            int t0=RdI(O_TICK),t1=RdI(O_RT),t2=RdI(O_FT),t3=RdI(O_STUN);long t4=RdL(O_LAST);float t5=RdF(O_MAXHP);
+            new SecureRandom().nextBytes(IvBuf);
+            WrI(O_TICK,t0);WrI(O_RT,t1);WrI(O_FT,t2);WrI(O_STUN,t3);WrL(O_LAST,t4);WrF(O_MAXHP,t5);
+            float skCv=GetHp();new SecureRandom().nextBytes(AkBuf);SetHp(skCv);
+            TSeq[0]=new SecureRandom().nextLong();SetSHp(skCv);
             byte[]rk=new byte[8];new SecureRandom().nextBytes(rk);
-            for(int i=0;i<8;i++){i11i1111[i]^=rk[i];i11i1lii[i]^=rk[i];}
+            for(int i=0;i<8;i++){OpK[i]^=rk[i];OpX[i]^=rk[i];}
         }
-        private void i1111l1l(){i111llil.entityData.set(i11li1i1,i111lli1()/i11ii1ii(i111iill));}
-        private void i11111l1(){PSU.getPlayersWithinRadius(i111ill1,i1111ill.x,i1111ill.y,i1111ill.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(i111llil,p,2)));}
-        private void i11111li(){PSU.getPlayersWithinRadius(i111ill1,i1111ill.x,i1111ill.y,i1111ill.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(i111llil,p,3)));}
-        private void i1111i1l(){i111i1l1[(int)(i111ill1.getGameTime()&31)]=i1111ill;}
-        private void i1111i1i(){
-            if(!i11lil1l()){discard();return;}
+        private void SyncHD(){Ent.entityData.set(SdaHR,GetHp()/RdF(O_MAXHP));}
+        private void FireTkA(){PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,p,2)));}
+        private void FireTkB(){PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,p,3)));}
+        private void SnapPos(){HPos[(int)(SLvl.getGameTime()&31)]=pos;}
+        private void VerCH(){
+            if(ChkRefl()){discard();return;}
+            if(!VerSH()){discard();return;}
             try{
                 byte[][]cur={
-                        i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11ilill.class"),
-                        i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l1iii.class"),
-                        i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11l1.class"),
-                        i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11li.class"),
-                        i111l111("com/ExtraBossRush/GoM/Entity/GoMEntity$i11l11il.class")
+                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ML.class"),
+                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$CU.class"),
+                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$HRPkt.class"),
+                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ECPkt.class"),
+                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$SPkt.class")
                 };
-                byte[][]base={i11liiii,i11liiil,i11liil1,i11liili,i11liill};
+                byte[][]base={HBas_ML2,HBas_CU2,HBas_HR2,HBas_EC2,HBas_SP2};
                 int d=0;
                 for(int j=0;j<cur.length;j++)for(int i=0;i<32;i++)d|=(cur[j][i]^base[j][i]);
                 if(d!=0){discard();return;}
             }catch(Exception e){discard();}
         }
-        private void i111ii1i(){i111il1i.setProgress(i111lli1()/i11ii1ii(i111iill));}
-        private void i1111ii1(){int i11i11l1=i11i1lil(i111iili);if(i11i11l1>0){i11i1l1l(i111iili,i11i11l1-1);if(i11i11l1==1)i111llil.entityData.set(i11li1ii,false);}}
-        i11ilill(String id,ServerLevel lv,Vec3 pos){
-            i111l1ll=id;i111ill1=lv;i1111ill=pos;
-            i111il1i=new ServerBossEvent(
+        private void UpdBB(){BEvt.setProgress(GetHp()/RdF(O_MAXHP));}
+        private void TkStun(){int stunV2=RdI(O_STUN);if(stunV2>0){WrI(O_STUN,stunV2-1);if(stunV2==1)Ent.entityData.set(SdaHt,false);}}
+        ML(String id,ServerLevel lv,Vec3 pos){
+            MlId=id;SLvl=lv;this.pos=pos;
+            BigInteger[]pk=GenPK(SRng);
+            PN=pk[0];PN2=pk[1];PLam=pk[2];PMu=pk[3];
+            BEvt=new ServerBossEvent(
                     Component.literal(new String(new byte[]{
                             (byte)0xE9,(byte)0xAD,(byte)0x94,(byte)0xE8,(byte)0xA1,(byte)0x93,
                             (byte)0xE3,(byte)0x81,(byte)0xAE,(byte)0xE5,(byte)0xAE,(byte)0x88,
                             (byte)0xE8,(byte)0xAD,(byte)0xB7,(byte)0xE8,(byte)0x80,(byte)0x85
                     },StandardCharsets.UTF_8)),
                     BossEvent.BossBarColor.RED,BossEvent.BossBarOverlay.PROGRESS);
-            i111il1i.setVisible(true);
-            System.arraycopy(i111li11,0,i11i1111,0,8);System.arraycopy(i111l1li,0,i11i1lii,0,8);
-            new SecureRandom().nextBytes(i111lll1);new SecureRandom().nextBytes(i11i111l);
-            i111l1l1[0]=new SecureRandom().nextLong();
-            i11i1l1l(i111iiii,0);i11i1l1l(i111illi,0);i11i1l1l(i111iiil,0);i11i1l1l(i111iili,0);i11ii1i1(i111ilil,0L);i11ii11i(i111iill,i111iil1);
-            i111llii(i111iil1);
-            Arrays.fill(i111i1l1,pos);
-            i111llil=new GoMEntity(GoMEntities.MAGIC_GUARDIAN.get(),lv);
-            i11111il(i111iil1);
-            i111llil.setPos(pos.x,pos.y,pos.z);i111llil.i11il11i(id);
-            i111llil.entityData.set(i11li1i1,1.0F);i111llil.entityData.set(i11li1ii,false);
+            BEvt.setVisible(true);
+            System.arraycopy(OpXor,0,OpK,0,8);System.arraycopy(OpKey,0,OpX,0,8);
+            SRng.nextBytes(IvBuf);SRng.nextBytes(AkBuf);
+            TSeq[0]=SRng.nextLong();
+            WrI(O_TICK,0);WrI(O_RT,0);WrI(O_FT,0);WrI(O_STUN,0);WrL(O_LAST,0L);WrF(O_MAXHP,MaxHp);
+            SetHp(MaxHp);
+            HpPail=PailEnc(Math.round(MaxHp*1000L));
+            HpMac=MkMac(Math.round(MaxHp*1000L));
+            Arrays.fill(HPos,pos);
+            Ent=new GoMEntity(GoMEntities.MAGIC_GUARDIAN.get(),lv);
+            SetSHp(MaxHp);
+            Ent.setPos(pos.x,pos.y,pos.z);Ent.EntId(id);
+            Ent.entityData.set(SdaHR,1.0F);Ent.entityData.set(SdaHt,false);
 
         }
-        String i111l1ll(){return i111l1ll;}
-        ServerLevel getLevel(){return i111ill1;}
-        boolean i11i11il(){return i111lli1()<=0;}
-        void i11i11li(){
-            if(i111lli1()<=0)return;
-            i111il1i.setVisible(true);
-            if((i11i1lil(i111iiii)&0xFF)==0)i1111l11(0);
-            i1111l11(2);
-            float i111ll1i=1.0F-(i111lli1()/i11ii1ii(i111iill));
-            int i11ii1li=(int)Math.ceil(1.0F+i111ll1i*9.0F);
-            for(int i=0;i<i11ii1li;i++)i11i1ll1();
-            i1111l11(5);i1111l11(4);i1111l11(6);
-            i1111iii();
+        String MlId(){return MlId;}
+        ServerLevel getLevel(){return SLvl;}
+        boolean IsDead(){return GetHp()<=0;}
+        void TickLP(){
+            if(GetHp()<=0)return;
+            BEvt.setVisible(true);
+            if((RdI(O_TICK)&0xFF)==0)DispOp(0);
+            DispOp(2);
+            float dmgRatio=1.0F-(GetHp()/RdF(O_MAXHP));
+            int subTks=(int)Math.ceil(1.0F+dmgRatio*9.0F);
+            for(int i=0;i<subTks;i++)TkInr();
+            DispOp(5);DispOp(4);DispOp(6);
+            Bcast();
         }
-        private void i11i1ll1(){
-            int i111i1il=i11i1lil(i111iiii);
-            List<ServerPlayer>near=PSU.getPlayersWithinRadius(i111ill1,i1111ill.x,i1111ill.y,i1111ill.z,1024.0);
-            if(near.isEmpty()&&!i111ill1.players().isEmpty())
-                i1111ill=i111ill1.players().get(i111liil.nextInt(i111ill1.players().size())).position().add(0,10,0);
-            if(i111i1il-i11i1lil(i111illi)>=100){i11i1l1l(i111illi,i111i1il);i1111l11(7);}
-            if(i111i1il-i11i1lil(i111iiil)>=600){i11i1l1l(i111iiil,i111i1il);i1111l11(1);}
-            i11i1l1l(i111iiii,i111i1il+1);
+        private void TkInr(){
+            int TkCnt=RdI(O_TICK);
+            List<ServerPlayer>near=PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0);
+            if(near.isEmpty()&&!SLvl.players().isEmpty())
+                pos=SLvl.players().get(Rng.nextInt(SLvl.players().size())).position().add(0,10,0);
+            if(TkCnt-RdI(O_RT)>=100){WrI(O_RT,TkCnt);DispOp(7);}
+            if(TkCnt-RdI(O_FT)>=600){WrI(O_FT,TkCnt);DispOp(1);}
+            WrI(O_TICK,TkCnt+1);
         }
-        void i11iiiil(ServerPlayer sp){
-            if(!i111l1il)return;i111l1il=false;
-            long now=i111ill1.getGameTime();
-            if(now-i11i1li1(i111ilil)<i111il1l)return;i11ii1i1(i111ilil,now);
-            float i11i1lll=(float)sp.getAttributeValue(Attributes.ATTACK_DAMAGE);
-            float dmg=i11i1lll*0.2F;
-            int i11ii1l1=net.minecraft.world.item.enchantment.EnchantmentHelper
-                    .getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,sp.getMainHandItem());
-            if(i11ii1l1>0)dmg+=(i11ii1l1*0.5F+0.5F)*0.2F;
-            dmg=Math.min(Math.max(dmg,0.0F),1000.0F);
-            float nH=Math.max(0.0F,i111lli1()-dmg);
-            i111llii(nH);i11111il(nH);
-            i111llil.entityData.set(i11li1ii,true);i111llil.entityData.set(i11li1i1,nH/i11ii1ii(i111iill));
-            if(nH<=0){
-                if(i111illl<i111l11i)i111illl++;
-                i111il1i.setProgress(0.0F);i111il1i.removeAllPlayers();i111l1i1.remove(i111llil.getId());return;
-            }
-            i11i1l1l(i111iili,20);
+        void ApplyH(ServerPlayer sp){
+            if(!HitLock.tryLock())return;
+            try{
+                long now=SLvl.getGameTime();
+                if(now-RdL(O_LAST)<MinHitDly)return;WrL(O_LAST,now);
+                float atkDmg=(float)sp.getAttributeValue(Attributes.ATTACK_DAMAGE);
+                float dmg=atkDmg*0.2F;
+                int sharpLvl=net.minecraft.world.item.enchantment.EnchantmentHelper
+                        .getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,sp.getMainHandItem());
+                if(sharpLvl>0)dmg+=(sharpLvl*0.5F+0.5F)*0.2F;
+                dmg=Math.min(Math.max(dmg,0.0F),1000.0F);
+                float nH=PolyCalc(GetHp(),dmg);
+                SetHp(nH);SetSHp(nH);
+                Ent.entityData.set(SdaHt,true);Ent.entityData.set(SdaHR,nH/RdF(O_MAXHP));
+                if(nH<=0){
+                    if(KillCnt<MaxKills)KillCnt++;
+                    BEvt.setProgress(0.0F);BEvt.removeAllPlayers();HpXT.remove(Ent.getId());
+                    Component deathMsg=Component.translatable("gomentity.boss.death");
+                    if (enableSphereBreak){MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent, sp, 4));}
+                    for(ServerPlayer p:SLvl.players()){
+                        p.sendSystemMessage(deathMsg);
+                    }
+                    return;
+                }
+                WrI(O_STUN,20);
+            }finally{HitLock.unlock();}
         }
-        private void i1111iii(){
-            i111llil.setPos(i1111ill.x,i1111ill.y,i1111ill.z);i1111l11(3);
-            ClientboundAddEntityPacket i11iiii1=new ClientboundAddEntityPacket(i111llil);
-            ClientboundSetEntityDataPacket i11iiili=new ClientboundSetEntityDataPacket(i111llil.getId(),i111llil.getEntityData().getNonDefaultValues());
-            float i11iil11=i111lli1()/i11ii1ii(i111iill);boolean i11lil11=i111llil.getEntityData().get(i11li1ii);
-            for(ServerPlayer p:i111ill1.players()){
-                if(p.distanceToSqr(i1111ill)<i111ilii){
-                    byte[]i11iii1i=i11iill1.get(p.getUUID()),i11iil1i=i11il111.get(p.getUUID()),i1111lii=i11iilli.get(p.getUUID());
-                    AtomicLong i11iil1l=i11iilll.get(p.getUUID());byte[]i111i1ii=i11ilili.get(p.getUUID());
-                    if(i11iii1i!=null&&i11iil1i!=null&&i1111lii!=null&&i11iil1l!=null&&i111i1ii!=null){
-                        byte[]i11iilii=new byte[32];for(int i=0;i<32;i++)i11iilii[i]=(byte)(i11iii1i[i]^i11iil1i[i]^i1111lii[i]);
-                        long seq=i11iil1l.getAndIncrement();
-                        i11l1ll1.send(PacketDistributor.PLAYER.with(()->p),new i11l11li(i11l11li.build(i11iilii,i111llil.getId(),i111l1ll)));
-                        p.connection.send(i11iiii1);p.connection.send(i11iiili);
-                        i11l1ll1.send(PacketDistributor.PLAYER.with(()->p),new i11l11il(i11l11il.build(i11iilii,p.getUUID(),i111llil.getId(),i11iil11,i11lil11,i1111ill.x,i1111ill.y,i1111ill.z,i111i1ii,seq)));
-                        i111il1i.addPlayer(p);Arrays.fill(i11iilii,(byte)0);
-                    }else{p.connection.send(i11iiii1);p.connection.send(i11iiili);i111il1i.addPlayer(p);}
+        private void Bcast(){
+            Ent.setPos(pos.x,pos.y,pos.z);DispOp(3);
+            ClientboundAddEntityPacket addPkt=new ClientboundAddEntityPacket(Ent);
+            ClientboundSetEntityDataPacket dataPkt=new ClientboundSetEntityDataPacket(Ent.getId(),Ent.getEntityData().getNonDefaultValues());
+            float hpRatio=GetHp()/RdF(O_MAXHP);boolean hurtF=Ent.getEntityData().get(SdaHt);
+            for(ServerPlayer p:SLvl.players()){
+                if(p.distanceToSqr(pos)<RangeSqr){
+                    byte[]skAv2=SkA.get(p.getUUID()),skBv=SkB.get(p.getUUID()),Hash=SkC.get(p.getUUID());
+                    AtomicLong seqCtr=CtrMap.get(p.getUUID());byte[]chkN=NcMap.get(p.getUUID());
+                    if(skAv2!=null&&skBv!=null&&Hash!=null&&seqCtr!=null&&chkN!=null){
+                        byte[]sk3=new byte[32];for(int i=0;i<32;i++)sk3[i]=(byte)(skAv2[i]^skBv[i]^Hash[i]);
+                        long seq=seqCtr.getAndIncrement();
+                        Chan.send(PacketDistributor.PLAYER.with(()->p),new ECPkt(ECPkt.build(sk3,Ent.getId(),MlId)));
+                        p.connection.send(addPkt);p.connection.send(dataPkt);
+                        Chan.send(PacketDistributor.PLAYER.with(()->p),new SPkt(SPkt.build(sk3,p.getUUID(),Ent.getId(),hpRatio,hurtF,pos.x,pos.y,pos.z,chkN,seq)));
+                        BEvt.addPlayer(p);Arrays.fill(sk3,(byte)0);
+                    }else{p.connection.send(addPkt);p.connection.send(dataPkt);BEvt.addPlayer(p);}
                 }else{
-                    p.connection.send(new ClientboundRemoveEntitiesPacket(i111llil.getId()));i111il1i.removePlayer(p);
-                    byte[]i11iii1i=i11iill1.get(p.getUUID()),i11iil1i=i11il111.get(p.getUUID()),i1111lii=i11iilli.get(p.getUUID());
-                    AtomicLong i11iil1l=i11iilll.get(p.getUUID());
-                    if(i11iii1i!=null&&i11iil1i!=null&&i1111lii!=null&&i11iil1l!=null){
-                        byte[]i11iilii=new byte[32];for(int i=0;i<32;i++)i11iilii[i]=(byte)(i11iii1i[i]^i11iil1i[i]^i1111lii[i]);
-                        long seq=i11iil1l.getAndIncrement();
-                        i11l1ll1.send(PacketDistributor.PLAYER.with(()->p),new i11l11il(i11l11il.remove(i11iilii,p.getUUID(),i111llil.getId(),seq)));
-                        Arrays.fill(i11iilii,(byte)0);
+                    p.connection.send(new ClientboundRemoveEntitiesPacket(Ent.getId()));BEvt.removePlayer(p);
+                    byte[]skAv2=SkA.get(p.getUUID()),skBv=SkB.get(p.getUUID()),Hash=SkC.get(p.getUUID());
+                    AtomicLong seqCtr=CtrMap.get(p.getUUID());
+                    if(skAv2!=null&&skBv!=null&&Hash!=null&&seqCtr!=null){
+                        byte[]sk3=new byte[32];for(int i=0;i<32;i++)sk3[i]=(byte)(skAv2[i]^skBv[i]^Hash[i]);
+                        long seq=seqCtr.getAndIncrement();
+                        Chan.send(PacketDistributor.PLAYER.with(()->p),new SPkt(SPkt.remove(sk3,p.getUUID(),Ent.getId(),seq)));
+                        Arrays.fill(sk3,(byte)0);
                     }
                 }
             }
-            i111llil.getEntityData().packDirty();
+            Ent.getEntityData().packDirty();
         }
         void discard(){
-            i111il1i.removeAllPlayers();int did=i111llil.getId();i111l1i1.remove(did);
-            i111llil.i11il1i1();
+            BEvt.removeAllPlayers();int did=Ent.getId();HpXT.remove(did);
+            Ent.DiscE();
             ClientboundRemoveEntitiesPacket rm=new ClientboundRemoveEntitiesPacket(did);
-            for(ServerPlayer p:i111ill1.players()){
+            for(ServerPlayer p:SLvl.players()){
                 p.connection.send(rm);
-                byte[]i11iii1i=i11iill1.get(p.getUUID()),i11iil1i=i11il111.get(p.getUUID()),i1111lii=i11iilli.get(p.getUUID());
-                AtomicLong i11iil1l=i11iilll.get(p.getUUID());
-                if(i11iii1i!=null&&i11iil1i!=null&&i1111lii!=null&&i11iil1l!=null){
-                    byte[]i11iilii=new byte[32];for(int i=0;i<32;i++)i11iilii[i]=(byte)(i11iii1i[i]^i11iil1i[i]^i1111lii[i]);
-                    long seq=i11iil1l.getAndIncrement();
-                    i11l1ll1.send(PacketDistributor.PLAYER.with(()->p),new i11l11li(i11l11li.revoke(i11iilii,did)));
-                    i11l1ll1.send(PacketDistributor.PLAYER.with(()->p),new i11l11il(i11l11il.remove(i11iilii,p.getUUID(),did,seq)));
-                    Arrays.fill(i11iilii,(byte)0);
+                byte[]skAv2=SkA.get(p.getUUID()),skBv=SkB.get(p.getUUID()),Hash=SkC.get(p.getUUID());
+                AtomicLong seqCtr=CtrMap.get(p.getUUID());
+                if(skAv2!=null&&skBv!=null&&Hash!=null&&seqCtr!=null){
+                    byte[]sk3=new byte[32];for(int i=0;i<32;i++)sk3[i]=(byte)(skAv2[i]^skBv[i]^Hash[i]);
+                    long seq=seqCtr.getAndIncrement();
+                    Chan.send(PacketDistributor.PLAYER.with(()->p),new ECPkt(ECPkt.revoke(sk3,did)));
+                    Chan.send(PacketDistributor.PLAYER.with(()->p),new SPkt(SPkt.remove(sk3,p.getUUID(),did,seq)));
+                    Arrays.fill(sk3,(byte)0);
                 }
             }
         }
     }
     @Mod.EventBusSubscriber(modid=ExtraBossRush.MOD_ID,bus=Mod.EventBusSubscriber.Bus.MOD,value=Dist.CLIENT)
-    public static class i111ll1l{
+    public static class RR{
         @SubscribeEvent
-        public static void i11i1ill(EntityRenderersEvent.RegisterRenderers event){
-            event.registerEntityRenderer(GoMEntities.MAGIC_GUARDIAN.get(),i111li1l::new);
+        public static void OnRegRend(EntityRenderersEvent.RegisterRenderers event){
+            event.registerEntityRenderer(GoMEntities.MAGIC_GUARDIAN.get(),GR::new);
         }
     }
     @OnlyIn(Dist.CLIENT)
-    public static class i111li1l extends MobRenderer<GoMEntity,HumanoidModel<GoMEntity>>{
-        private static final ResourceLocation i11il1l1=new ResourceLocation(ExtraBossRush.MOD_ID,"textures/entity/magic_guardian.png");
-        private static final Random i11ili11=new Random();
-        public i111li1l(EntityRendererProvider.Context ctx){
+    public static class GR extends MobRenderer<GoMEntity,HumanoidModel<GoMEntity>>{
+        private static final ResourceLocation TexRL=new ResourceLocation(ExtraBossRush.MOD_ID,"textures/entity/magic_guardian.png");
+        private static final Random RngR=new Random();
+        public GR(EntityRendererProvider.Context ctx){
             super(ctx,new HumanoidModel<>(ctx.bakeLayer(ModelLayers.PLAYER_SLIM)),0.6F);
         }
-        @Override public @NotNull ResourceLocation getTextureLocation(@NotNull GoMEntity e){return i11il1l1;}
+        @Override public @NotNull ResourceLocation getTextureLocation(@NotNull GoMEntity e){return TexRL;}
         @Override
         public void render(GoMEntity entity,float yaw,float pt,@NotNull PoseStack ps,@NotNull MultiBufferSource buf,int light){
             super.render(entity,yaw,pt,ps,buf,light);
-            if(entity.i11ili1l())i11i1li1(entity,ps,buf,pt,light,1F,0F,0F,0.2F,true);
-            float ef=entity.i11ilii1();float off=ef*0.04F-0.02F;
+            if(entity.IsHurt())RdL(entity,ps,buf,pt,light,1F,0F,0F,0.2F,true);
+            float ef=entity.GetDR();float off=ef*0.04F-0.02F;
             if(off>0.001F){
                 Random r=new Random((long)entity.getId()*98765L+entity.tickCount*12345L);
-                i11iiill(entity,ps,buf,pt,light,off,r,1F,0F,0F,ef*0.3F);
-                i11iiill(entity,ps,buf,pt,light,off,r,0F,1F,1F,ef*0.3F);
+                RenderGlow(entity,ps,buf,pt,light,off,r,1F,0F,0F,ef*0.3F);
+                RenderGlow(entity,ps,buf,pt,light,off,r,0F,1F,1F,ef*0.3F);
             }
         }
-        private void i11iiill(GoMEntity e,PoseStack ps,MultiBufferSource buf,float pt,int light,float off,Random r,float rc,float gc,float bc,float a){
+        private void RenderGlow(GoMEntity e,PoseStack ps,MultiBufferSource buf,float pt,int light,float off,Random r,float rc,float gc,float bc,float a){
             ps.pushPose();float f=Mth.rotLerp(pt,e.yBodyRotO,e.yBodyRot);
             this.setupRotations(e,ps,(float)e.tickCount+pt,f,pt);
             ps.scale(-1F,-1F,1F);ps.translate(0F,-1.501F,0F);
-            ps.translate((i11ili11.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F,
-                    (i11ili11.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F,
-                    (i11ili11.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F);
-            this.model.renderToBuffer(ps,buf.getBuffer(RenderType.entityTranslucentEmissive(i11il1l1)),light,OverlayTexture.NO_OVERLAY,rc,gc,bc,a);
+            ps.translate((RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F,
+                    (RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F,
+                    (RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F);
+            this.model.renderToBuffer(ps,buf.getBuffer(RenderType.entityTranslucentEmissive(TexRL)),light,OverlayTexture.NO_OVERLAY,rc,gc,bc,a);
             ps.popPose();
         }
-        private void i11i1li1(GoMEntity e,PoseStack ps,MultiBufferSource buf,float pt,int light,float r,float g,float b,float a,boolean hurt){
+        private void RdL(GoMEntity e,PoseStack ps,MultiBufferSource buf,float pt,int light,float r,float g,float b,float a,boolean hurt){
             ps.pushPose();float f=Mth.rotLerp(pt,e.yBodyRotO,e.yBodyRot);
             this.setupRotations(e,ps,(float)e.tickCount+pt,f,pt);
             ps.scale(-1.0002F,-1.0002F,1.0002F);ps.translate(0F,-1.501F,0F);
-            this.model.renderToBuffer(ps,buf.getBuffer(RenderType.entityTranslucentEmissive(i11il1l1)),light,
+            this.model.renderToBuffer(ps,buf.getBuffer(RenderType.entityTranslucentEmissive(TexRL)),light,
                     OverlayTexture.pack(OverlayTexture.u(0F),OverlayTexture.v(hurt)),r,g,b,a);
             ps.popPose();
         }

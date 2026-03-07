@@ -5,6 +5,7 @@ public class ARV2Config {
     public static final ForgeConfigSpec COMMON_SPEC;
     public static final ForgeConfigSpec CLIENT_SPEC;
     public static ForgeConfigSpec.BooleanValue ENABLE_BEAM_BREAK;
+    public static ForgeConfigSpec.BooleanValue ENABLE_SPHERE_BREAK;
     public static ForgeConfigSpec.BooleanValue RANDOM_KEY_CONFIG;
     public static ForgeConfigSpec.IntValue MAX_RANDOM_KEY_TICKS;
     public static ForgeConfigSpec.IntValue MIN_RANDOM_KEY_TICKS;
@@ -18,6 +19,9 @@ public class ARV2Config {
         ENABLE_BEAM_BREAK = serverBuilder
                 .comment("If false, all beam destruction and block replacement will be disabled.")
                 .define("enableBeamBreak", false);
+        ENABLE_SPHERE_BREAK = serverBuilder
+                .comment("If false, all sphere destruction and block replacement will be disabled.")
+                .define("enableSphereBreak", true);
         serverBuilder.pop();
         SERVER_SPEC = serverBuilder.build();
         ForgeConfigSpec.Builder commonBuilder = new ForgeConfigSpec.Builder();
