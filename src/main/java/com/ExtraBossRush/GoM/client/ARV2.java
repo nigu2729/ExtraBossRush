@@ -36,8 +36,12 @@ public class ARV2 {
     private int tE = 0; private final Vec3Anim pA, rA;
     private final MultiKeyAnim sA, aA; private final ColorAnim cA;
     private final boolean isB, isS; private final float bS, bL, bI;
-    private ARV2(ObjLoadResult d, RenderType t, int m, Vec3Anim p, Vec3Anim r, MultiKeyAnim s, ColorAnim c, MultiKeyAnim a, boolean b, boolean s2, float bs, float bl, float bi) {
-        mD = d; rT = t; mL = m; pA = p; rA = r; sA = s; cA = c; aA = a; isB = b; isS = s2; bS = bs; bL = bl; bI = Math.max(0.001f, bi);
+    private final net.minecraft.world.entity.Entity lookTarget;
+    private final float lookLerp; private final float maxTurnSpeed;
+    private float currentPitch = Float.NaN, currentYaw = Float.NaN;
+    private float prevPitch = Float.NaN, prevYaw = Float.NaN;
+    private ARV2(ObjLoadResult d, RenderType t, int m, Vec3Anim p, Vec3Anim r, MultiKeyAnim s, ColorAnim c, MultiKeyAnim a, boolean b, boolean s2, float bs, float bl, float bi, net.minecraft.world.entity.Entity lookTarget, float lookLerp, float maxTurnSpeed) {
+        mD = d; rT = t; mL = m; pA = p; rA = r; sA = s; cA = c; aA = a; isB = b; isS = s2; bS = bs; bL = bl; bI = Math.max(0.001f, bi); this.lookTarget = lookTarget; this.lookLerp = lookLerp; this.maxTurnSpeed = maxTurnSpeed;
     }
     @SubscribeEvent
     public static void onRender(RenderLevelStageEvent e) {
@@ -52,22 +56,64 @@ public class ARV2 {
         });
         bs.endBatch();
     }
+    public void tickRotation() {
+        if (this.lookTarget == null || !this.lookTarget.isAlive()) return;
+        this.prevPitch = this.currentPitch;
+        this.prevYaw = this.currentYaw;
+        pA.fill((float)this.tE, C_P);
+        Vec3 currentPos = new Vec3(C_P.x, C_P.y, C_P.z);
+        Vec3 targetEye = new Vec3(
+                lookTarget.getX(),
+                lookTarget.getY() + lookTarget.getEyeHeight() * 0.5,
+                lookTarget.getZ()
+        );
+        Vec3 desired = targetEye.subtract(currentPos).normalize();
+        if (Float.isNaN(this.currentPitch)) {
+            rA.fill((float)this.tE, C_R);
+            this.currentPitch = this.prevPitch = C_R.x;
+            this.currentYaw   = this.prevYaw   = C_R.y;
+        }
+        double radY = Math.toRadians(this.currentYaw);
+        double radP = Math.toRadians(this.currentPitch);
+        double cp = Math.cos(radP);
+        Vec3 currentDir = new Vec3(
+                Math.sin(radY) * cp,
+                Math.sin(radP),
+                Math.cos(radY) * cp
+        ).normalize();
+        double dot = currentDir.dot(desired);dot = Math.min(Math.max(dot, -1.0), 1.0);
+        double angleDiffDeg = Math.toDegrees(Math.acos(dot));
+        if (angleDiffDeg < 0.01) {return;}
+        float maxDegPerTick;
+        if (this.lookLerp > 0) {maxDegPerTick = 180f;} else {maxDegPerTick = this.maxTurnSpeed;}
+        double fraction = Math.min(1.0, maxDegPerTick / angleDiffDeg);
+        Vec3 newDir = currentDir.lerp(desired, fraction).normalize();
+        this.currentYaw = (float) Math.toDegrees(Math.atan2(newDir.x, newDir.z));
+        this.currentPitch = (float) -Math.toDegrees(Math.atan2(newDir.y, Math.hypot(newDir.x, newDir.z)));
+    }
+    private static float clamp(float val, float min, float max) {
+        return Math.max(min, Math.min(max, val));
+    }
     private void rb(PoseStack ps, VertexConsumer vc, Camera cam, float pt) {
-        float ct = (float) tE + pt, a = aA.get(ct); if (a <= 0.0001f) return;
-        pA.fill(ct, C_P); float s = sA.get(ct), rad = mD.maxRadius() * s;
-        if (isB || isS) rad += Math.min(bL, bS * ct);
-        if (!iv(cam, C_P, rad)) return;
-        Vec3 cp = cam.getPosition(); rA.fill(ct, C_R); cA.fill(ct, C_C);
+        float ct=(float)tE+pt,a=aA.get(ct);if(a <= 0.00001f)return;
+        pA.fill(ct, C_P);
+        if (this.lookTarget!=null&&this.lookTarget.isAlive()&&!Float.isNaN(this.currentPitch)) {
+            float renderYaw = prevYaw+(currentYaw-prevYaw)*pt;
+            float renderPitch = prevPitch+(currentPitch-prevPitch)*pt;
+            C_R.set(renderPitch,renderYaw,0);
+        }else{rA.fill(ct, C_R);}
+        cA.fill(ct, C_C);
+        Vec3 cp=cam.getPosition();
         ps.pushPose();
-        ps.translate(C_P.x - cp.x, C_P.y - cp.y, C_P.z - cp.z);
-        ps.mulPose(C_Q.rotationYXZ(C_R.y * 0.01745f, C_R.x * 0.01745f, C_R.z * 0.01745f));
-        if (isS) ps.scale(s, s, Math.min(bL, bS * ct) / bI);
-        else ps.scale(s, s, s);
-        Matrix4f m = ps.last().pose(); Matrix3f n = ps.last().normal();
-        if (isB) {
-            float l = Math.min(bL, bS * ct); int c = (int) Math.ceil(l / bI);
-            for (int i = 0; i < c; i++) wm(m, n, vc, C_C, a, i * bI);
-        } else wm(m, n, vc, C_C, a, 0);
+        ps.translate(C_P.x-cp.x,C_P.y-cp.y,C_P.z-cp.z);
+        ps.mulPose(C_Q.rotationYXZ(C_R.y*0.01745f,C_R.x*0.01745f,C_R.z*0.01745f));
+        if(isS)ps.scale(sA.get(ct),sA.get(ct),Math.min(bL,bS*ct)/bI);
+        else ps.scale(sA.get(ct),sA.get(ct),sA.get(ct));
+        Matrix4f m=ps.last().pose();Matrix3f n=ps.last().normal();
+        if(isB){
+            float l=Math.min(bL,bS*ct);int c=(int)Math.ceil(l/bI);
+            for(int i=0;i<c;i++)wm(m,n,vc,C_C,a,i*bI);
+        }else wm(m,n,vc,C_C,a,0);
         ps.popPose();
     }
     private void wm(Matrix4f m, Matrix3f n, VertexConsumer vc, float[] c, float a, float z) {
@@ -96,7 +142,7 @@ public class ARV2 {
         return (dx*l.x()+dy*l.y()+dz*l.z())/dl > Math.cos(diagHalf + Math.asin(Math.min(1.0, r/dl)));
     }
     @SubscribeEvent public static void fov(ViewportEvent.ComputeFov e) { cFov = (float) e.getFOV(); }
-    @SubscribeEvent public static void tick(TickEvent.ClientTickEvent e) { if (e.phase == TickEvent.Phase.END) R_L.removeIf(r -> ++r.tE >= r.mL); }
+    @SubscribeEvent public static void tick(TickEvent.ClientTickEvent e) { if (e.phase == TickEvent.Phase.END){R_L.removeIf(r -> ++r.tE >= r.mL);for(ARV2 r : R_L) r.tickRotation();}}
     public static RenderType getAdd(ResourceLocation t) { return A_C.computeIfAbsent(t, l -> ct("arv2:add", l, () -> { RenderSystem.enableBlend(); RenderSystem.blendFunc(770, 1); })); }
     public static RenderType getTrans(ResourceLocation t) { return T_C.computeIfAbsent(t, l -> ct("arv2:trans", l, () -> { RenderSystem.enableBlend(); RenderSystem.defaultBlendFunc(); })); }
     private static RenderType ct(String n, ResourceLocation t, Runnable s) {
@@ -135,6 +181,7 @@ public class ARV2 {
         private final ResourceLocation m; private RenderType t; private int mL = 200;
         private boolean isB, isS; private float bS=32, bL=1024, bI=1, pX[], pY[], pZ[], rP[], rY[], rR[], sV[], cR[], cG[], cB[], aV[];
         private int pT[], rT[], sT[], cT[], aT[]; private DynamicVec3 dP, dR; private DynamicFloat dS, dA; private DynamicColor dC;
+        private net.minecraft.world.entity.Entity lookTarget = null; private float lookLerp = 1.0f; private float maxTurnSpeed = 9999.0f;
         public Builder(ResourceLocation m, ResourceLocation tex, Vec3 start) {
             this.m = m; this.t = getTrans(tex);
             setPos(start.x, start.y, start.z); setRot(0, 0, 0); setSize(1); setRGB(1, 1, 1); setAlpha(1);
@@ -158,10 +205,14 @@ public class ARV2 {
         public Builder setDynamicSize(DynamicFloat v) { dS=v; return this; }
         public Builder setDynamicRGB(DynamicColor v) { dC=v; return this; }
         public Builder setDynamicAlpha(DynamicFloat v) { dA=v; return this; }
+        public Builder lookAt(net.minecraft.world.entity.Entity entity) { this.lookTarget = entity; this.lookLerp = 1.0f; return this; }
+        public Builder lookAt(net.minecraft.world.entity.Entity entity, float lerp) { this.lookTarget = entity; this.lookLerp = lerp; return this; }
+        public Builder lookAtWithMaxSpeed(net.minecraft.world.entity.Entity entity, float maxDegreesPerTick) { this.lookTarget = entity;this.lookLerp = -1f; this.maxTurnSpeed = maxDegreesPerTick; return this; }
         public void spawn() {
             R_L.add(new ARV2(loadObj(m), t, mL, dP!=null ? new Vec3Anim(dP) : new Vec3Anim(pX, pY, pZ, pT),
                     dR!=null ? new Vec3Anim(dR) : new Vec3Anim(rP, rY, rR, rT), dS!=null ? new MultiKeyAnim(dS) : new MultiKeyAnim(sV, sT),
-                    dC!=null ? new ColorAnim(dC) : new ColorAnim(cR, cG, cB, cT), dA!=null ? new MultiKeyAnim(dA) : new MultiKeyAnim(aV, aT), isB, isS, bS, bL, bI));
+                    dC!=null ? new ColorAnim(dC) : new ColorAnim(cR, cG, cB, cT), dA!=null ? new MultiKeyAnim(dA) : new MultiKeyAnim(aV, aT), isB, isS, bS, bL, bI,
+                    lookTarget, lookLerp, maxTurnSpeed));
         }
     }
     private static class MultiKeyAnim {

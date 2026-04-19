@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "extrabossrush.refmap.json",
   "mixins": [
+    "MixinGoMKill"
   ],
   "client": [
     "KeyBindsScreenMixin"

@@ -8,6 +8,7 @@ version="1.0.0"
 displayName="ExtraBossRush"
 authors="tasogare_rui"
 description='''${mod_description}'''
+mixinConfigs = "extrabossrush.mixins.json"
 
 [[dependencies.extrabossrush]]
     modId="forge"

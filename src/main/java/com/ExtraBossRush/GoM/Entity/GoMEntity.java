@@ -1,6 +1,5 @@
 package com.ExtraBossRush.GoM.Entity;
 import com.ExtraBossRush.ExtraBossRush;
-import com.ExtraBossRush.GoM.ARV2Config;
 import com.ExtraBossRush.GoM.Item.GoMItems;
 import com.ExtraBossRush.GoM.Skill.GoMSkillEvent;
 import com.ExtraBossRush.GoM.Support.PSU;
@@ -43,7 +42,6 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.config.ModConfigEvent;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.PacketDistributor;
@@ -87,7 +85,6 @@ public class GoMEntity extends Monster {
     private static final ConcurrentHashMap<UUID,long[]>     RlMap  =new ConcurrentHashMap<>();
     private static final byte[]PiPep;
     static{byte[]piPepInit=new byte[32];SRng.nextBytes(piPepInit);PiPep=piPepInit;}
-    private static boolean enableSphereBreak = true;
     private static final int    MaxFail=10;
     private static final long   RekeyT=6000L,MinHitT=3L;
     private static final int    RateLim=120;
@@ -376,9 +373,7 @@ public class GoMEntity extends Monster {
                     Chan.send(PacketDistributor.PLAYER.with(()->sp),new PKPkt(kp.getPublic().getEncoded()));return;
                 }
                 if(CU.ChkPL(sp)){Arrays.fill(sk,(byte)0);KickP(sp,null);return;}
-                if(CU.VerAll()){
-                    KickP(sp,sk);return;
-                }
+                if(CU.VerAll()){KickP(sp,sk);return;}
                 byte[]aad=uid.toString().getBytes(StandardCharsets.UTF_8);
                 byte[]plain=CU.DecDbl(sk,p.Data,aad);
                 if(plain==null||plain.length<21){
@@ -452,12 +447,6 @@ public class GoMEntity extends Monster {
         static byte[]remove(byte[]sk,UUID uid,int eid,long seq){
             try{ByteBuffer bb=ByteBuffer.allocate(13);bb.put((byte)0x02);bb.putLong(seq);bb.putInt(eid);
                 return CU.EncAG(sk,bb.array(),uid.toString().getBytes(StandardCharsets.UTF_8));}catch(Exception e){throw new RuntimeException(e);}
-        }
-    }
-    @SubscribeEvent
-    public static void onConfigLoaded(ModConfigEvent.Loading event) {
-        if (event.getConfig().getSpec() == ARV2Config.SERVER_SPEC) {
-            enableSphereBreak = ARV2Config.ENABLE_SPHERE_BREAK.get();
         }
     }
     @Mod.EventBusSubscriber(modid=ExtraBossRush.MOD_ID,bus=Mod.EventBusSubscriber.Bus.FORGE,value=Dist.CLIENT)
@@ -581,8 +570,6 @@ public class GoMEntity extends Monster {
     public static void OnLvUnld(LevelEvent.Unload event){
         if(event.getLevel().isClientSide())return;MlList.forEach(ML::discard);MlList.clear();
     }
-
-
     @SubscribeEvent
     public static void OnRCBlk(net.minecraftforge.event.entity.player.PlayerInteractEvent.RightClickBlock event){
         if(event.getLevel().isClientSide())return;
@@ -608,17 +595,13 @@ public class GoMEntity extends Monster {
     public static void OnRegCmd(RegisterCommandsEvent event){
         event.getDispatcher().register(
                 net.minecraft.commands.Commands.literal("gomentity").requires(s->s.hasPermission(2))
-
                         .executes(ctx->{
                             net.minecraft.commands.CommandSourceStack src=ctx.getSource();
-                            if(!(src.getEntity() instanceof ServerPlayer p)){
-                                src.sendFailure(Component.literal("Player only"));return 0;
-                            }
+                            if(!(src.getEntity() instanceof ServerPlayer p)){src.sendFailure(Component.literal("Player only"));return 0;}
                             Vec3 sp2=p.position().add(p.getLookAngle().scale(5));
                             MlList.add(new ML(GenId(),p.serverLevel(),sp2));
                             src.sendSuccess(()->Component.literal("Spawned"),true);return 1;
                         })
-
                         .then(net.minecraft.commands.Commands.argument("pos",net.minecraft.commands.arguments.coordinates.Vec3Argument.vec3())
                                 .executes(ctx->{
                                     net.minecraft.commands.CommandSourceStack src=ctx.getSource();
@@ -632,6 +615,15 @@ public class GoMEntity extends Monster {
                         )
         );
     }
+    @SubscribeEvent
+    public static void OnEJ(net.minecraftforge.event.entity.EntityJoinLevelEvent event) {
+        if (event.getLevel().isClientSide()) return;
+        if (!(event.getEntity() instanceof GoMEntity)) return;
+        Vec3 spawnPos = event.getEntity().position();
+        ServerLevel level = (ServerLevel) event.getLevel();
+        MlList.add(new ML(GenId(), level, spawnPos));
+        event.setCanceled(true);
+    }
     interface CS{byte[]get();void set(byte[]c);}
     static final class CSI implements CS{
         private byte[]skCv;
@@ -639,18 +631,15 @@ public class GoMEntity extends Monster {
         public void set(byte[]c){skCv=c==null?null:Arrays.copyOf(c,c.length);}
     }
     static final class ML{
-        private static final int O_TICK=0x00,O_RT=0x04,O_FT=0x08,O_STUN=0x0C,O_LAST=0x10,O_MAXHP=0x18;
+        // O_S8 を追加。SBuf=0x2C(44bytes)、O_S8=0x28(40)+4=44でぴったり収まる
+        private static final int O_TICK=0x00,O_RT=0x04,O_FT=0x08,O_STUN=0x0C,O_LAST=0x10,O_MAXHP=0x18,O_ST=0x1C,O_TP=0x20,O_SL=0x24,O_S8=0x28;
         private static final byte[]HBas_ML2,HBas_CU2,HBas_HR2,HBas_EC2,HBas_SP2,OpKey;
         private static final byte[]OpXor;
-
         private static boolean ChkRefl(){
             try{
                 java.lang.reflect.Field[]fs=ML.class.getDeclaredFields();
                 for(java.lang.reflect.Field f:fs){
-                    try{
-                        f.setAccessible(false);
-                        if(f.isAccessible())return true;
-                    }catch(SecurityException ignored){}
+                    try{f.setAccessible(false);if(f.isAccessible())return true;}catch(SecurityException ignored){}
                 }
                 for(String arg:ManagementFactory.getRuntimeMXBean().getInputArguments()){
                     if(arg.startsWith("-javaagent")||arg.contains("instrument")||arg.contains("jdwp"))return true;
@@ -667,11 +656,11 @@ public class GoMEntity extends Monster {
             }catch(Exception e){return new byte[32];}
         }
         static{
-            HBas_ML2   =HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ML.class");
+            HBas_ML2=HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ML.class");
             HBas_CU2=HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$CU.class");
-            HBas_HR2 =HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$HRPkt.class");
-            HBas_EC2 =HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ECPkt.class");
-            HBas_SP2 =HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$SPkt.class");
+            HBas_HR2=HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$HRPkt.class");
+            HBas_EC2=HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ECPkt.class");
+            HBas_SP2=HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$SPkt.class");
             byte[]ok=CU.KDF(HBas_ML2,(byte)0x55);OpKey=ok;
             byte[]plain={0x00,0x03,0x07,0x01,0x06,0x04,0x05,0x02};
             byte[]ot=new byte[8];for(int i=0;i<8;i++)ot[i]=(byte)(plain[i]^ok[i]);
@@ -685,11 +674,11 @@ public class GoMEntity extends Monster {
         private static final Random Rng=new Random();
         static final ConcurrentHashMap<Integer,Long>HpXT=new ConcurrentHashMap<>();
         final String MlId;
-        private final ServerLevel SLvl;
+        private ServerLevel SLvl;
         private final ServerBossEvent BEvt;
-        final GoMEntity Ent;
+        GoMEntity Ent;
         Vec3 pos;
-        private final byte[]SBuf=new byte[0x20];
+        private final byte[]SBuf=new byte[0x2C];
         private final byte[]IvBuf=new byte[16];
         private final byte[]AkBuf=new byte[16];
         private final CS   CSt=new CSI();
@@ -701,11 +690,10 @@ public class GoMEntity extends Monster {
         private BigInteger PN,PN2,PLam,PMu;
         private BigInteger HpPail;
         private byte[] HpMac;
-        private static final int PailBits=1024;
+        private static final int PailBits=2048;
         private static BigInteger[] GenPK(SecureRandom Rng){
             BigInteger p=BigInteger.probablePrime(PailBits/2,Rng);
-            BigInteger q;
-            do{q=BigInteger.probablePrime(PailBits/2,Rng);}while(q.equals(p));
+            BigInteger q;do{q=BigInteger.probablePrime(PailBits/2,Rng);}while(q.equals(p));
             BigInteger n=p.multiply(q),n2=n.multiply(n);
             BigInteger pm1=p.subtract(BigInteger.ONE),qm1=q.subtract(BigInteger.ONE);
             BigInteger lam=pm1.divide(pm1.gcd(qm1)).multiply(qm1);
@@ -715,8 +703,7 @@ public class GoMEntity extends Monster {
         private BigInteger PailEnc(long m){
             BigInteger mB=BigInteger.valueOf(m);
             if(mB.signum()<0)mB=PN.add(mB);
-            BigInteger r;
-            do{r=new BigInteger(PailBits,SRng).mod(PN);}while(r.compareTo(BigInteger.ONE)<=0);
+            BigInteger r;do{r=new BigInteger(PailBits,SRng).mod(PN);}while(r.compareTo(BigInteger.ONE)<=0);
             BigInteger c1=BigInteger.ONE.add(mB.multiply(PN)).mod(PN2);
             BigInteger c2=r.modPow(PN,PN2);
             return c1.multiply(c2).mod(PN2);
@@ -728,9 +715,7 @@ public class GoMEntity extends Monster {
             if(m.compareTo(PN.divide(BigInteger.TWO))>0)m=m.subtract(PN);
             return m.longValue();
         }
-        private void PailApply(long delta){
-            HpPail=HpPail.multiply(PailEnc(delta)).mod(PN2);
-        }
+        private void PailApply(long delta){HpPail=HpPail.multiply(PailEnc(delta)).mod(PN2);}
         private byte[] MkMac(long hpLong){
             try{
                 javax.crypto.Mac mac=javax.crypto.Mac.getInstance("HmacSHA256");
@@ -741,8 +726,7 @@ public class GoMEntity extends Monster {
         }
         private boolean ChkMac(long hpLong){
             if(HpMac==null)return false;
-            byte[]exp=MkMac(hpLong);
-            if(exp==null)return false;
+            byte[]exp=MkMac(hpLong);if(exp==null)return false;
             int d=0;for(int i=0;i<32;i++)d|=(HpMac[i]^exp[i]);return d==0;
         }
         private int IvMskI(int o){int p=o&0xF;return((IvBuf[p]&0xFF)<<24)|((IvBuf[(p+1)&0xF]&0xFF)<<16)|((IvBuf[(p+2)&0xF]&0xFF)<<8)|(IvBuf[(p+3)&0xF]&0xFF);}
@@ -755,43 +739,26 @@ public class GoMEntity extends Monster {
         private void WrF(int o,float v){WrI(o,Float.floatToRawIntBits(v));}
         private byte[]HpKey(){byte[]k=CU.KDF(AkBuf,(byte)0x42);for(int i=0;i<16;i++)k[i]^=PiPep[i];return Arrays.copyOf(k,16);}
         private float GetHp(){return CU.DecHPF(HpKey(),CSt.get());}
-        private void  SetHp(float v){
+        private void SetHp(float v){
             CSt.set(CU.EncHPF(HpKey(),v));
-            if(HpPail!=null){
-                long prev=PailDec(HpPail);
-                long cur=Math.round(v*1000L);
-                if(prev!=cur)PailApply(cur-prev);
-            }
+            if(HpPail!=null){long prev=PailDec(HpPail);long cur=Math.round(v*1000L);if(prev!=cur)PailApply(cur-prev);}
             HpMac=MkMac(Math.round(v*1000L));
         }
         private void SetSHp(float v){HpXT.put(Ent.getId(),(long)Float.floatToRawIntBits(v)^(TSeq[0]&0xFFFFFFFFL));}
-
         private float PolyCalc(float hp,float dmg){
             int path=(OpK[(int)(TSeq[0]&7)]^OpX[(int)(TSeq[0]&7)])&0x0F;
             float r;
             switch(path){
-                case 0:r=hp-dmg;break;
-                case 1:r=-(dmg-hp);break;
-                case 2:{int hb=Float.floatToRawIntBits(hp)^0xFFFFFFFF,db=Float.floatToRawIntBits(dmg)^0xFFFFFFFF;
-                    r=Float.intBitsToFloat(hb^0xFFFFFFFF)-Float.intBitsToFloat(db^0xFFFFFFFF);break;}
+                case 0:r=hp-dmg;break;case 1:r=-(dmg-hp);break;
+                case 2:{int hb=Float.floatToRawIntBits(hp)^0xFFFFFFFF,db=Float.floatToRawIntBits(dmg)^0xFFFFFFFF;r=Float.intBitsToFloat(hb^0xFFFFFFFF)-Float.intBitsToFloat(db^0xFFFFFFFF);break;}
                 case 3:{double h=hp,d=dmg;r=(float)(h-d);break;}
-                case 4:{int k=0x55AA55AA;
-                    float h2=Float.intBitsToFloat(Float.floatToRawIntBits(hp)^k^k);
-                    float d2=Float.intBitsToFloat(Float.floatToRawIntBits(dmg)^k^k);
-                    r=h2-d2;break;}
-                case 5:{byte[]b=ByteBuffer.allocate(8).putFloat(hp).putFloat(dmg).array();
-                    r=ByteBuffer.wrap(b,0,4).getFloat()-ByteBuffer.wrap(b,4,4).getFloat();break;}
+                case 4:{int k=0x55AA55AA;float h2=Float.intBitsToFloat(Float.floatToRawIntBits(hp)^k^k);float d2=Float.intBitsToFloat(Float.floatToRawIntBits(dmg)^k^k);r=h2-d2;break;}
+                case 5:{byte[]b=ByteBuffer.allocate(8).putFloat(hp).putFloat(dmg).array();r=ByteBuffer.wrap(b,0,4).getFloat()-ByteBuffer.wrap(b,4,4).getFloat();break;}
                 case 6:{float acc=hp;acc+=-dmg;r=acc;break;}
-                case 7:{long hl=Double.doubleToRawLongBits(hp),dl=Double.doubleToRawLongBits(dmg);
-                    r=(float)(Double.longBitsToDouble(hl)-Double.longBitsToDouble(dl));break;}
-                case 8:{int hb=Float.floatToRawIntBits(hp),db=Float.floatToRawIntBits(dmg);
-                    hb=(hb<<1)|(hb>>>31);db=(db<<1)|(db>>>31);
-                    hb=(hb>>>1)|(hb<<31);db=(db>>>1)|(db<<31);
-                    r=Float.intBitsToFloat(hb)-Float.intBitsToFloat(db);break;}
+                case 7:{long hl=Double.doubleToRawLongBits(hp),dl=Double.doubleToRawLongBits(dmg);r=(float)(Double.longBitsToDouble(hl)-Double.longBitsToDouble(dl));break;}
+                case 8:{int hb=Float.floatToRawIntBits(hp),db=Float.floatToRawIntBits(dmg);hb=(hb<<1)|(hb>>>31);db=(db<<1)|(db>>>31);hb=(hb>>>1)|(hb<<31);db=(db>>>1)|(db<<31);r=Float.intBitsToFloat(hb)-Float.intBitsToFloat(db);break;}
                 case 9:{float t=hp*2f;r=t*0.5f-dmg*2f*0.5f;break;}
-                case 10:{int hb=Float.floatToRawIntBits(hp),db=Float.floatToRawIntBits(dmg);
-                    hb^=0xA5A5A5A5;db^=0xA5A5A5A5;hb^=0xA5A5A5A5;db^=0xA5A5A5A5;
-                    r=Float.intBitsToFloat(hb)-Float.intBitsToFloat(db);break;}
+                case 10:{int hb=Float.floatToRawIntBits(hp),db=Float.floatToRawIntBits(dmg);hb^=0xA5A5A5A5;db^=0xA5A5A5A5;hb^=0xA5A5A5A5;db^=0xA5A5A5A5;r=Float.intBitsToFloat(hb)-Float.intBitsToFloat(db);break;}
                 default:r=hp-dmg;break;
             }
             return Math.max(0f,r);
@@ -801,10 +768,7 @@ public class GoMEntity extends Monster {
             float shd=Float.intBitsToFloat((int)((e^(TSeq[0]&0xFFFFFFFFL))&0xFFFFFFFFL));
             float hp=GetHp();
             if(Math.abs(hp-shd)>=1.0f)return false;
-            if(HpPail!=null){
-                float pailHp=(float)(PailDec(HpPail)/1000.0);
-                if(Math.abs(hp-pailHp)>=1.0f)return false;
-            }
+            if(HpPail!=null){float pailHp=(float)(PailDec(HpPail)/1000.0);if(Math.abs(hp-pailHp)>=1.0f)return false;}
             if(!ChkMac(Math.round(hp*1000L)))return false;
             return true;
         }
@@ -816,9 +780,10 @@ public class GoMEntity extends Monster {
             }
         }
         private void Rekey(){
-            int t0=RdI(O_TICK),t1=RdI(O_RT),t2=RdI(O_FT),t3=RdI(O_STUN);long t4=RdL(O_LAST);float t5=RdF(O_MAXHP);
+            // O_S8 も保存・復元する
+            int t0=RdI(O_TICK),t1=RdI(O_RT),t2=RdI(O_FT),t3=RdI(O_STUN),t6=RdI(O_ST),t7=RdI(O_TP),t8=RdI(O_SL),t9=RdI(O_S8);long t4=RdL(O_LAST);float t5=RdF(O_MAXHP);
             new SecureRandom().nextBytes(IvBuf);
-            WrI(O_TICK,t0);WrI(O_RT,t1);WrI(O_FT,t2);WrI(O_STUN,t3);WrL(O_LAST,t4);WrF(O_MAXHP,t5);
+            WrI(O_TICK,t0);WrI(O_RT,t1);WrI(O_FT,t2);WrI(O_STUN,t3);WrL(O_LAST,t4);WrF(O_MAXHP,t5);WrI(O_ST,t6);WrI(O_TP,t7);WrI(O_SL,t8);WrI(O_S8,t9);
             float skCv=GetHp();new SecureRandom().nextBytes(AkBuf);SetHp(skCv);
             TSeq[0]=new SecureRandom().nextLong();SetSHp(skCv);
             byte[]rk=new byte[8];new SecureRandom().nextBytes(rk);
@@ -827,21 +792,56 @@ public class GoMEntity extends Monster {
         private void SyncHD(){Ent.entityData.set(SdaHR,GetHp()/RdF(O_MAXHP));}
         private void FireTkA(){PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,p,2)));}
         private void FireTkB(){PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,p,3)));}
+        private void FireTkC(){PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,p,5)));}
+        private void FireTkE(){PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,p,7)));}
+        private void FireTkF(){PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0).forEach(p->MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,p,8)));}
+
+        private void FireTkD(){
+            List<ServerPlayer>near=PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0);
+            ServerPlayer target;
+            if(!near.isEmpty()){target=near.get(Rng.nextInt(near.size()));}
+            else{
+                List<ServerPlayer>all=new java.util.ArrayList<>();
+                SLvl.getServer().getAllLevels().forEach(lv->all.addAll(lv.players()));
+                if(all.isEmpty())return;
+                target=all.get(Rng.nextInt(all.size()));
+                ServerLevel newLevel=(ServerLevel)target.level();
+                if(newLevel!=SLvl){
+                    Ent.remove(net.minecraft.world.entity.Entity.RemovalReason.CHANGED_DIMENSION);
+                    SLvl=newLevel;
+                    Ent=new GoMEntity(GoMEntities.MAGIC_GUARDIAN.get(),newLevel);
+                    Ent.EntId(MlId);Ent.entityData.set(SdaHR,GetHp()/RdF(O_MAXHP));Ent.entityData.set(SdaHt,false);
+                }
+            }
+            double bestX=target.getX(),bestY=target.getY(),bestZ=target.getZ();
+            for(int attempt=0;attempt<16;attempt++){
+                float ang=(float)(SRng.nextFloat()*Math.PI*2);float rad=8+SRng.nextFloat()*24;
+                double cx=target.getX()+Math.cos(ang)*rad;double cz=target.getZ()+Math.sin(ang)*rad;
+                double cy=findGroundY(SLvl,cx,target.getY(),cz);
+                if(SLvl.getBlockState(new net.minecraft.core.BlockPos((int)cx,(int)cy,(int)cz)).isAir()||attempt==15){bestX=cx;bestY=cy;bestZ=cz;break;}
+            }
+            pos=new Vec3(bestX,bestY,bestZ);
+            MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,target,6));
+        }
+        private double findGroundY(ServerLevel lv,double x,double startY,double z){
+            int bx=(int)Math.floor(x),bz=(int)Math.floor(z);
+            for(int dy=32;dy>=-32;dy--){
+                int by=(int)Math.floor(startY+dy);
+                net.minecraft.core.BlockPos bp=new net.minecraft.core.BlockPos(bx,by,bz);
+                net.minecraft.core.BlockPos bpAbove=new net.minecraft.core.BlockPos(bx,by+1,bz);
+                net.minecraft.core.BlockPos bpAbove2=new net.minecraft.core.BlockPos(bx,by+2,bz);
+                if(!lv.getBlockState(bp).isAir()&&lv.getBlockState(bpAbove).isAir()&&lv.getBlockState(bpAbove2).isAir()){return by+1;}
+            }
+            return startY;
+        }
         private void SnapPos(){HPos[(int)(SLvl.getGameTime()&31)]=pos;}
         private void VerCH(){
             if(ChkRefl()){discard();return;}
             if(!VerSH()){discard();return;}
             try{
-                byte[][]cur={
-                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ML.class"),
-                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$CU.class"),
-                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$HRPkt.class"),
-                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ECPkt.class"),
-                        HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$SPkt.class")
-                };
+                byte[][]cur={HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ML.class"),HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$CU.class"),HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$HRPkt.class"),HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$ECPkt.class"),HashCls("com/ExtraBossRush/GoM/Entity/GoMEntity$SPkt.class")};
                 byte[][]base={HBas_ML2,HBas_CU2,HBas_HR2,HBas_EC2,HBas_SP2};
-                int d=0;
-                for(int j=0;j<cur.length;j++)for(int i=0;i<32;i++)d|=(cur[j][i]^base[j][i]);
+                int d=0;for(int j=0;j<cur.length;j++)for(int i=0;i<32;i++)d|=(cur[j][i]^base[j][i]);
                 if(d!=0){discard();return;}
             }catch(Exception e){discard();}
         }
@@ -849,29 +849,20 @@ public class GoMEntity extends Monster {
         private void TkStun(){int stunV2=RdI(O_STUN);if(stunV2>0){WrI(O_STUN,stunV2-1);if(stunV2==1)Ent.entityData.set(SdaHt,false);}}
         ML(String id,ServerLevel lv,Vec3 pos){
             MlId=id;SLvl=lv;this.pos=pos;
-            BigInteger[]pk=GenPK(SRng);
-            PN=pk[0];PN2=pk[1];PLam=pk[2];PMu=pk[3];
+            BigInteger[]pk=GenPK(SRng);PN=pk[0];PN2=pk[1];PLam=pk[2];PMu=pk[3];
             BEvt=new ServerBossEvent(
-                    Component.literal(new String(new byte[]{
-                            (byte)0xE9,(byte)0xAD,(byte)0x94,(byte)0xE8,(byte)0xA1,(byte)0x93,
-                            (byte)0xE3,(byte)0x81,(byte)0xAE,(byte)0xE5,(byte)0xAE,(byte)0x88,
-                            (byte)0xE8,(byte)0xAD,(byte)0xB7,(byte)0xE8,(byte)0x80,(byte)0x85
-                    },StandardCharsets.UTF_8)),
+                    Component.literal(new String(new byte[]{(byte)0xE9,(byte)0xAD,(byte)0x94,(byte)0xE8,(byte)0xA1,(byte)0x93,(byte)0xE3,(byte)0x81,(byte)0xAE,(byte)0xE5,(byte)0xAE,(byte)0x88,(byte)0xE8,(byte)0xAD,(byte)0xB7,(byte)0xE8,(byte)0x80,(byte)0x85},StandardCharsets.UTF_8)),
                     BossEvent.BossBarColor.RED,BossEvent.BossBarOverlay.PROGRESS);
             BEvt.setVisible(true);
             System.arraycopy(OpXor,0,OpK,0,8);System.arraycopy(OpKey,0,OpX,0,8);
-            SRng.nextBytes(IvBuf);SRng.nextBytes(AkBuf);
-            TSeq[0]=SRng.nextLong();
-            WrI(O_TICK,0);WrI(O_RT,0);WrI(O_FT,0);WrI(O_STUN,0);WrL(O_LAST,0L);WrF(O_MAXHP,MaxHp);
-            SetHp(MaxHp);
-            HpPail=PailEnc(Math.round(MaxHp*1000L));
-            HpMac=MkMac(Math.round(MaxHp*1000L));
+            SRng.nextBytes(IvBuf);SRng.nextBytes(AkBuf);TSeq[0]=SRng.nextLong();
+            WrI(O_TICK,0);WrI(O_RT,0);WrI(O_FT,0);WrI(O_STUN,0);WrL(O_LAST,0L);WrF(O_MAXHP,MaxHp);WrI(O_ST,0);WrI(O_TP,0);WrI(O_SL,0);WrI(O_S8,0);
+            SetHp(MaxHp);HpPail=PailEnc(Math.round(MaxHp*1000L));HpMac=MkMac(Math.round(MaxHp*1000L));
             Arrays.fill(HPos,pos);
             Ent=new GoMEntity(GoMEntities.MAGIC_GUARDIAN.get(),lv);
-            SetSHp(MaxHp);
-            Ent.setPos(pos.x,pos.y,pos.z);Ent.EntId(id);
+            SetSHp(MaxHp);Ent.setPos(pos.x,pos.y,pos.z);Ent.EntId(id);
             Ent.entityData.set(SdaHR,1.0F);Ent.entityData.set(SdaHt,false);
-
+            FireTkC();
         }
         String MlId(){return MlId;}
         ServerLevel getLevel(){return SLvl;}
@@ -884,16 +875,21 @@ public class GoMEntity extends Monster {
             float dmgRatio=1.0F-(GetHp()/RdF(O_MAXHP));
             int subTks=(int)Math.ceil(1.0F+dmgRatio*9.0F);
             for(int i=0;i<subTks;i++)TkInr();
-            DispOp(5);DispOp(4);DispOp(6);
-            Bcast();
+            DispOp(5);DispOp(4);DispOp(6);Bcast();
         }
         private void TkInr(){
             int TkCnt=RdI(O_TICK);
             List<ServerPlayer>near=PSU.getPlayersWithinRadius(SLvl,pos.x,pos.y,pos.z,1024.0);
-            if(near.isEmpty()&&!SLvl.players().isEmpty())
-                pos=SLvl.players().get(Rng.nextInt(SLvl.players().size())).position().add(0,10,0);
+            if(near.isEmpty()){
+                if(!SLvl.players().isEmpty()){ServerPlayer np=SLvl.players().get(Rng.nextInt(SLvl.players().size()));pos=np.position().add(0,10,0);}
+                else{FireTkD();}
+            }
             if(TkCnt-RdI(O_RT)>=100){WrI(O_RT,TkCnt);DispOp(7);}
             if(TkCnt-RdI(O_FT)>=600){WrI(O_FT,TkCnt);DispOp(1);}
+            if(TkCnt-RdI(O_ST)>=1200){WrI(O_ST,TkCnt);FireTkC();}
+            if(TkCnt-RdI(O_TP)>=1400){WrI(O_TP,TkCnt);FireTkD();}
+            if(TkCnt-RdI(O_SL)>=1000){WrI(O_SL,TkCnt);FireTkE();}
+            if(TkCnt-RdI(O_S8)>=4000){WrI(O_S8,TkCnt);FireTkF();}
             WrI(O_TICK,TkCnt+1);
         }
         void ApplyH(ServerPlayer sp){
@@ -903,8 +899,7 @@ public class GoMEntity extends Monster {
                 if(now-RdL(O_LAST)<MinHitDly)return;WrL(O_LAST,now);
                 float atkDmg=(float)sp.getAttributeValue(Attributes.ATTACK_DAMAGE);
                 float dmg=atkDmg*0.2F;
-                int sharpLvl=net.minecraft.world.item.enchantment.EnchantmentHelper
-                        .getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,sp.getMainHandItem());
+                int sharpLvl=net.minecraft.world.item.enchantment.EnchantmentHelper.getItemEnchantmentLevel(net.minecraft.world.item.enchantment.Enchantments.SHARPNESS,sp.getMainHandItem());
                 if(sharpLvl>0)dmg+=(sharpLvl*0.5F+0.5F)*0.2F;
                 dmg=Math.min(Math.max(dmg,0.0F),1000.0F);
                 float nH=PolyCalc(GetHp(),dmg);
@@ -914,10 +909,8 @@ public class GoMEntity extends Monster {
                     if(KillCnt<MaxKills)KillCnt++;
                     BEvt.setProgress(0.0F);BEvt.removeAllPlayers();HpXT.remove(Ent.getId());
                     Component deathMsg=Component.translatable("gomentity.boss.death");
-                    if (enableSphereBreak){MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent, sp, 4));}
-                    for(ServerPlayer p:SLvl.players()){
-                        p.sendSystemMessage(deathMsg);
-                    }
+                    MinecraftForge.EVENT_BUS.post(new GoMSkillEvent(Ent,sp,4));
+                    for(ServerPlayer p:SLvl.players())p.sendSystemMessage(deathMsg);
                     return;
                 }
                 WrI(O_STUN,20);
@@ -955,8 +948,7 @@ public class GoMEntity extends Monster {
             Ent.getEntityData().packDirty();
         }
         void discard(){
-            BEvt.removeAllPlayers();int did=Ent.getId();HpXT.remove(did);
-            Ent.DiscE();
+            BEvt.removeAllPlayers();int did=Ent.getId();HpXT.remove(did);Ent.DiscE();
             ClientboundRemoveEntitiesPacket rm=new ClientboundRemoveEntitiesPacket(did);
             for(ServerPlayer p:SLvl.players()){
                 p.connection.send(rm);
@@ -983,9 +975,7 @@ public class GoMEntity extends Monster {
     public static class GR extends MobRenderer<GoMEntity,HumanoidModel<GoMEntity>>{
         private static final ResourceLocation TexRL=new ResourceLocation(ExtraBossRush.MOD_ID,"textures/entity/magic_guardian.png");
         private static final Random RngR=new Random();
-        public GR(EntityRendererProvider.Context ctx){
-            super(ctx,new HumanoidModel<>(ctx.bakeLayer(ModelLayers.PLAYER_SLIM)),0.6F);
-        }
+        public GR(EntityRendererProvider.Context ctx){super(ctx,new HumanoidModel<>(ctx.bakeLayer(ModelLayers.PLAYER_SLIM)),0.6F);}
         @Override public @NotNull ResourceLocation getTextureLocation(@NotNull GoMEntity e){return TexRL;}
         @Override
         public void render(GoMEntity entity,float yaw,float pt,@NotNull PoseStack ps,@NotNull MultiBufferSource buf,int light){
@@ -1002,9 +992,7 @@ public class GoMEntity extends Monster {
             ps.pushPose();float f=Mth.rotLerp(pt,e.yBodyRotO,e.yBodyRot);
             this.setupRotations(e,ps,(float)e.tickCount+pt,f,pt);
             ps.scale(-1F,-1F,1F);ps.translate(0F,-1.501F,0F);
-            ps.translate((RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F,
-                    (RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F,
-                    (RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F);
+            ps.translate((RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F,(RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F,(RngR.nextFloat()*2F-1F)*off+(r.nextFloat()-.5F)*.01F);
             this.model.renderToBuffer(ps,buf.getBuffer(RenderType.entityTranslucentEmissive(TexRL)),light,OverlayTexture.NO_OVERLAY,rc,gc,bc,a);
             ps.popPose();
         }
@@ -1012,8 +1000,7 @@ public class GoMEntity extends Monster {
             ps.pushPose();float f=Mth.rotLerp(pt,e.yBodyRotO,e.yBodyRot);
             this.setupRotations(e,ps,(float)e.tickCount+pt,f,pt);
             ps.scale(-1.0002F,-1.0002F,1.0002F);ps.translate(0F,-1.501F,0F);
-            this.model.renderToBuffer(ps,buf.getBuffer(RenderType.entityTranslucentEmissive(TexRL)),light,
-                    OverlayTexture.pack(OverlayTexture.u(0F),OverlayTexture.v(hurt)),r,g,b,a);
+            this.model.renderToBuffer(ps,buf.getBuffer(RenderType.entityTranslucentEmissive(TexRL)),light,OverlayTexture.pack(OverlayTexture.u(0F),OverlayTexture.v(hurt)),r,g,b,a);
             ps.popPose();
         }
     }
