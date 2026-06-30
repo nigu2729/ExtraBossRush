@@ -44,3 +44,6 @@ Any individual wishing to modify, redistribute, or build upon this software is e
 
 6. DISCLAIMER
 This software is provided "as is", without warranty of any kind. All granted rights are subordinate to the overarching authority of the Primary Author.
+
+7. PROHIBITION OF REVERSE ENGINEERING AND DECOMPILATION
+Decompiling, disassembling, reverse engineering, or attempting to extract the source code and internal logic of this software is STRICTLY PROHIBITED. Any attempt to bypass, inspect, or decompile the code shall result in the immediate and permanent revocation of all rights, and the Primary Author reserves the right to take any necessary actions to protect the intellectual property.
