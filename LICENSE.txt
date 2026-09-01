@@ -47,6 +47,7 @@ This software is provided "as is", without warranty of any kind. All granted rig
 
 7. PROHIBITION OF REVERSE ENGINEERING AND DECOMPILATION
 Decompiling, disassembling, reverse engineering, or attempting to extract the source code and internal logic of this software is STRICTLY PROHIBITED. Any attempt to bypass, inspect, or decompile the code shall result in the immediate and permanent revocation of all rights, and the Primary Author reserves the right to take any necessary actions to protect the intellectual property.
+
 8. Exceptions
 The recognized individuals described in this clause are not subject to the restrictions of the above clause:
 Mr. tarku, Mr. iesuok, Mr. dice7000
