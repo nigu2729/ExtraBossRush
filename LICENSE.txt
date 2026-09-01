@@ -8,7 +8,7 @@ BY VISITING THIS REPOSITORY PAGE, ACCESSING THIS GITHUB REPOSITORY,
 OR VIEWING ANY CONTENT WITHIN THIS PROJECT (INCLUDING BUT NOT LIMITED TO
 README, LICENSE, SOURCE CODE, OR ASSOCIATED WEB CONTENT), YOU ACKNOWLEDGE
 AND VOLUNTARILY AGREE TO BE FULLY BOUND BY ALL TERMS AND CONDITIONS OF
-THIS LICENSE (SECTIONS 1 THROUGH 6).
+THIS LICENSE (SECTIONS 1 THROUGH 7).
 
 IF YOU DO NOT AGREE TO EVERY TERM IN THIS LICENSE, YOU MUST IMMEDIATELY
 CEASE ALL ACCESS TO THIS REPOSITORY, CLOSE THIS PAGE, AND DISCARD ANY
@@ -47,3 +47,6 @@ This software is provided "as is", without warranty of any kind. All granted rig
 
 7. PROHIBITION OF REVERSE ENGINEERING AND DECOMPILATION
 Decompiling, disassembling, reverse engineering, or attempting to extract the source code and internal logic of this software is STRICTLY PROHIBITED. Any attempt to bypass, inspect, or decompile the code shall result in the immediate and permanent revocation of all rights, and the Primary Author reserves the right to take any necessary actions to protect the intellectual property.
+8. Exceptions
+The recognized individuals described in this clause are not subject to the restrictions of the above clause:
+Mr. tarku, Mr. iesuok, Mr. dice7000
