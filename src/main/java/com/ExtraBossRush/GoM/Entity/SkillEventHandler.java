@@ -697,7 +697,6 @@ public class SkillEventHandler {
             }
         }).build());
     }
-
     private record DelayedSkillTask(long executeAt, ResourceKey<Level> dimensionKey, Vec3 pos, int skillId, UUID casterId, ServerAction action, List<EffectDef> effects) {}
 
     private static final List<DelayedSkillTask> SERVER_TASKS = new ArrayList<>();
